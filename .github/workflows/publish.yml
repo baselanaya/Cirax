@@ -2,16 +2,18 @@ name: publish
 
 # Publish on version tags (v0.3.0, ...) or manually via workflow_dispatch.
 #
-# One-time setup (Settings → Secrets and variables → Actions):
-#   PYPI_API_TOKEN — create at pypi.org → Account settings → API tokens
-#                    (project-scoped token once `cirax` exists there)
-#   NPM_TOKEN      — create at npmjs.com → Access Tokens → Granular token
-#                    with Read & publish permission
+# PyPI: uses OIDC trusted publishing — no token needed. The pending
+# publisher on pypi.org must match exactly:
+#   project: cirax · owner: baselanaya · repository: Cirax ·
+#   workflow: publish.yml · environment: (blank)
 #
-# Token-free alternative for PyPI: configure a "pending trusted publisher"
-# on pypi.org for project `cirax` (owner baselanaya, repo Cirax, workflow
-# publish.yml), then delete the `password:` line below — the action falls
-# back to OIDC trusted publishing.
+# Alternative: add a PYPI_API_TOKEN secret and a `password:` input to the
+# gh-action-pypi-publish step.
+#
+# npm: opt-in via workflow_dispatch (checkbox) — requires the NPM_TOKEN
+# secret (npmjs.com → Access Tokens → Granular, Read & publish). To make
+# npm automatic on tags, add NPM_TOKEN and change the job condition to
+# `startsWith(github.ref, 'refs/tags/v')`.
 
 on:
   push:
@@ -19,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       npm:
-        description: "also publish the npm wrapper"
+        description: "also publish the npm wrapper (requires NPM_TOKEN secret)"
         type: boolean
         default: false
 
@@ -28,7 +30,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
-      id-token: write  # for trusted publishing (unused when a token is set)
+      id-token: write  # trusted publishing (OIDC)
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -36,11 +38,9 @@ jobs:
         run: uv build
       - name: publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
 
   npm:
-    if: startsWith(github.ref, 'refs/tags/v') || inputs.npm == true
+    if: github.event_name == 'workflow_dispatch' && inputs.npm == true
     runs-on: ubuntu-latest
     defaults:
       run:
