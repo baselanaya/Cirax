@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Cirax
+GenericName=File Converter
+Comment=Every format to every format — fully local, sandboxed
+Exec=cirax-app
+Icon=cirax
+Terminal=false
+Categories=Utility;Office;AudioVideo;Graphics;
+Keywords=convert;converter;ffmpeg;image;video;audio;pdf;

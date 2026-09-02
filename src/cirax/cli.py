@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import __version__
+from . import __version__, ui
 from .detect import detect
 from .executor import ConversionError, execute
 from .probe import ffmpeg_hw_accel, probe_all
@@ -122,12 +122,28 @@ def cmd_detect(args) -> int:
 def _show_plan(reg, plan, src_path: Path, dst_path: Path) -> None:
     loss = "lossless" if plan.lossless else "lossy"
     chain = " -> ".join(plan.engines) or "(identity)"
-    print(f"route: {plan.src} -> {plan.dst}   [{loss}]")
-    for i, step in enumerate(plan.steps):
-        tag = "lossless" if step.lossless else "lossy"
-        print(f"  {i + 1}. {step.engine.name} ({step.engine.binary}) "
-              f"-> {step.to_format} [{tag}]")
-    print(f"\n{src_path.name} ({plan.src}) -> {dst_path} ({plan.dst})  via {chain}")
+    if _HAS_RICH:
+        from rich.text import Text
+        body = Text()
+        for i, step in enumerate(plan.steps):
+            tag_style = "green" if step.lossless else "yellow"
+            body.append(f"  {i + 1}. ", style="#7d8b99")
+            body.append(f"{step.engine.name}", style="bold")
+            body.append(f"  ->  {step.to_format}   ")
+            body.append("lossless" if step.lossless else "lossy", style=tag_style)
+            body.append("\n")
+        from rich.console import Group
+        from rich.panel import Panel
+        _console.print(Panel(
+            Group(Text(f"route: {plan.src} → {plan.dst}   [{loss}]"), body),
+            title=f"{src_path.name} → {dst_path.name}",
+            subtitle=f"via {chain}", border_style="#1668a8"))
+    else:
+        print(f"route: {plan.src} -> {plan.dst}   [{loss}]")
+        for i, step in enumerate(plan.steps):
+            tag = "lossless" if step.lossless else "lossy"
+            print(f"  {i + 1}. {step.engine.name} -> {step.to_format} [{tag}]")
+        print(f"{src_path.name} -> {dst_path} via {chain}")
 
 
 def cmd_plan(args) -> int:
@@ -207,10 +223,10 @@ def _convert_one(reg, args, src_path: Path, dst_path: Path) -> int:
         return 2
 
     if not args.quiet:
-        print(f"converting {src_path.name}: {plan.src} -> {plan.dst} "
-              f"({' -> '.join(plan.engines)}, "
-              f"{'lossless' if plan.lossless else 'lossy'})"
-              + (f" [preset: {args.preset}]" if args.preset else ""))
+        ui.status(f"converting [bold]{src_path.name}[/bold]: {plan.src} → "
+                  f"{plan.dst}  ({' → '.join(plan.engines)}, "
+                  f"{'lossless' if plan.lossless else 'lossy'})"
+                  + (f"  [preset: {args.preset}]" if args.preset else ""))
     if args.dry_run:
         return 0
     try:
@@ -221,7 +237,7 @@ def _convert_one(reg, args, src_path: Path, dst_path: Path) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 3
     if not args.quiet:
-        print(f"done: {dst_path}")
+        ui.status(f"done: [bold]{dst_path}[/bold]")
     return 0
 
 
@@ -413,5 +429,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    args_list = list(argv if argv is not None else sys.argv[1:])
+    if not args_list:
+        ui.banner()
+        _console.print(
+            "[bold]quickstart[/bold]\n"
+            "  [cyan]cirax doctor[/cyan]            what can this machine convert?\n"
+            "  [cyan]cirax plan FILE[/cyan]         list every reachable target\n"
+            "  [cyan]cirax convert IN OUT[/cyan]    convert (chains engines automatically)\n"
+            "  [cyan]cirax watch DIR -t pdf[/cyan]  convert new files as they appear\n"
+            "  [cyan]cirax serve[/cyan]             local web UI\n\n"
+            "[#7d8b99]add --version · run with -h on any command[/#7d8b99]")
+        return 0
+    args = build_parser().parse_args(args_list)
     return args.func(args)

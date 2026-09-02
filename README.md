@@ -1,142 +1,157 @@
-# Cirax
+<div align="center">
+  <img src="assets/banner.svg" alt="Cirax" width="100%">
+  <p>
+    <a href="https://pypi.org/project/cirax/"><img src="https://img.shields.io/pypi/v/cirax?color=%231668a8" alt="PyPI"></a>
+    <img src="https://img.shields.io/badge/platform-linux-lightgrey" alt="Platform">
+    <img src="https://img.shields.io/badge/network-none-success" alt="No network">
+    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License">
+    <a href="https://github.com/baselanaya/Cirax/actions"><img src="https://github.com/baselanaya/Cirax/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  </p>
+  <p><b>The universal converter for people who read the privacy policy.</b><br>
+  Don't upload. Convert.</p>
+</div>
 
-**Universal local conversion hub for Linux.** Every format to every format,
-fully offline, by routing between best-in-class open-source engines
-(FFmpeg, libvips, ImageMagick, LibreOffice, Pandoc, Calibre, 7-Zip, qpdf...)
-plus modern local AI models (GLM-OCR vision OCR via Ollama).
+---
 
-Cirax doesn't reimplement codecs — it *composes* engines. A declarative YAML
-registry describes what each installed engine can read and write; a router
-finds the best chain (direct, or through pivot formats like PDF/PNG/WAV/JSON)
-and executes it. See [PLAN.md](PLAN.md) for the full architecture and roadmap.
+**Cirax** turns your Linux machine into a conversion hub. One command reaches
+every format — not because Cirax reimplements codecs, but because it routes
+between the best engines ever written (FFmpeg, libvips, ImageMagick,
+LibreOffice, Pandoc, Calibre, 7-Zip, qpdf…) and chains them automatically.
+Files never leave your disk. Ever.
 
-## Install
+## The Problem
 
-**PyPI** — live:
+1. **Every online converter is a data breach waiting to happen.** Your
+   contracts, IDs, medical scans and family photos, uploaded to an anonymous
+   ad-riddled server.
+2. **Local tools are islands.** ffmpeg alone has a 40-page manual; LibreOffice
+   won't talk to ImageMagick; your HEIC stays HEIC.
+3. **Format-pair explosions.** 109 formats × 109 formats = 11,881 possible
+   converters. Nobody writes those.
+
+## The Product
+
+```console
+$ # what used to require three websites and a leap of faith:
+$ cirax convert report.docx preview.png
+● converting report.docx: application/vnd...document → image/png
+  (libreoffice → pdftoppm, lossy)
+
+$ # speech to subtitles, offline:
+$ cirax convert talk.mp3 talk.srt
+
+$ # AI-grade OCR — a 1.3B-parameter vision model, fully local:
+$ cirax convert scan.png text.txt
+```
+
+## Core Features
+
+- **Chain router** — a Dijkstra search over a 109-format graph picks the best
+  chain of engines for any pair, ranked by fidelity (`lossless` beats `lossy`)
+  and tagged before it runs.
+- **58 engines, one grammar** — a declarative YAML registry wraps each engine;
+  adding a format is a stanza, not a pull request.
+- **Sandboxed by default** — every job runs in a [bubblewrap](https://github.com/containers/bubblewrap)
+  jail: no network, read-only filesystem, writes confined to the workspace.
+- **Local AI OCR** — [GLM-OCR](https://huggingface.co/zai-org/GLM-OCR) (MIT,
+  ~1.3B params) via Ollama: layout-aware text + Markdown, zero cloud.
+- **Same-format ops** — strip EXIF/GPS, fix line endings, transcode charsets.
+- **Watch & serve** — convert folders as files land in them, or drive it from
+  a local web UI / plain curl.
+
+## Quick Start
+
+### Installation
+
+| Channel | Command |
+|---|---|
+| PyPI | `uv tool install cirax` (or `pipx install cirax`) |
+| curl | `curl -fsSL https://raw.githubusercontent.com/baselanaya/Cirax/main/install.sh \| sh` |
+| npm | `npm i -g @baselanaya/cirax` |
+| Desktop | grab the `.deb` / `.rpm` / `.AppImage` from [Releases](https://github.com/baselanaya/Cirax/releases) |
+
+Cirax itself is tiny — the engines are your system packages. `cirax doctor
+--show-missing` prints exactly what to install.
+
+### First conversion
 
 ```sh
-uv tool install cirax     # or: pipx install cirax
+cirax doctor              # capability matrix of this machine
+cirax plan report.docx    # every reachable target, with routes
+cirax convert report.docx preview.png
 ```
 
-**curl one-liner** (bootstraps `uv`, installs as a `uv tool`):
+### Desktop app
 
-```sh
-CIRAX_SRC=. sh install.sh                 # from this checkout
-CIRAX_REPO=https://github.com/baselanaya/Cirax sh <(curl -fsSL \
-  https://raw.githubusercontent.com/baselanaya/Cirax/main/install.sh)
+Drag, drop, convert. The GUI speaks to the same sandboxed pipeline as the CLI
+and ships in every release artifact.
+
+### Engine installation
+
+| Domain | pacman packages |
+|---|---|
+| Images | `libvips imagemagick libheif libjxl libavif libwebp oxipng pngquant` |
+| Video / Audio | `ffmpeg mkvtoolnix-cli sox opus-tools gifsicle` |
+| Office | `libreoffice-still pandoc` |
+| Ebooks | `calibre` |
+| PDF | `qpdf ghostscript poppler img2pdf ocrmypdf` |
+| Archives | `7zip zstd unar libisoburn` |
+| Data | `jq go-yq miller duckdb` |
+| RAW / Vector | `darktable inkscape librsvg potrace` |
+| 3D / Disks / GIS | `assimp qemu-img gdal` |
+| AI | `ollama` + `ollama pull glm-ocr` |
+
+## Architecture
+
+```mermaid
+flowchart LR
+    A[CLI / GUI / Web / Watch] --> B[Job Engine]
+    B --> C{Router}
+    C --> D[Engine Registry YAML]
+    C --> E[Engine 1]
+    C --> F[Engine 2]
+    C --> G[Engine n]
+    E --> H[(bwrap jail)]
+    F --> H
+    G --> H
+    H --> I[Output]
 ```
 
-**Arch/AUR** — PKGBUILD in [`packaging/`](packaging/) (community AUR upload pending).
+Inputs are detected with `file(1)` + an extension table; the router searches
+the capability graph up to three hops through pivot formats (PDF, PNG, WAV,
+JSON…); a job engine runs the chain inside a sandbox with per-engine
+concurrency, progress parsing and guaranteed cleanup.
 
-**npm** — the `cirax` command installs globally (the package is scoped
-because npm's typosquatting rules block the bare name; the Python core
-self-installs on first run):
+## Cirax vs. Online Converters
 
-```sh
-npm i -g @baselanaya/cirax && cirax doctor
-```
+| | Online converters | Cirax |
+|---|---|---|
+| Your files | uploaded to someone's server | never leave the disk |
+| Format pairs | a hand-picked menu | the closure of 58 engines (chains) |
+| Fidelity | whatever it feels like | tagged `lossless`/`lossy` before running |
+| OCR / AI | extra fee, extra upload | GLM-OCR locally, after one `ollama pull` |
+| Works offline | no | completely |
+| Sandboxing | n/a | bubblewrap, no network, per job |
 
-**Development** (uv-managed):
+## Supported Platforms
 
-```sh
-uv sync                # create .venv, install deps + cirax (editable)
-uv run cirax doctor    # or: . .venv/bin/activate
-make test              # 31-check smoke suite
-```
+| Platform | Status | Notes |
+|---|---|---|
+| Linux x86_64 (Arch, Ubuntu, Fedora…) | ✅ supported | engines via your package manager |
+| AppImage / deb / rpm | ✅ released | desktop app + CLI in every release |
+| Windows / macOS | ❌ not yet | engine discovery needs porting |
 
-## Usage
+## Contributing
 
-```sh
-cirax detect photo.heic              # what is this file?
-cirax plan report.docx               # list every reachable target + route
-cirax plan report.docx png           # show the exact chain for one target
-cirax presets                        # list engine presets
+Fork → branch (`feat/…`) → PR. Adding a conversion engine is a YAML stanza —
+see [README section on engines](#adding-an-engine) in the docs and the
+existing specs under `src/cirax/data/engines/`.
 
-cirax convert report.docx png        # docx -> pdf (libreoffice) -> png (pdftoppm)
-cirax convert song.flac -t opus      # via ffmpeg
-cirax convert video.mov out.mkv --preset web720     # quality presets
-cirax convert doc.pdf page.png --pages all          # all pages -> page-01.png, ...
-cirax convert a.png b.png c.png -t webp             # batch
-cirax convert photos.zip out.7z      # extract -> recreate (staged)
-
-# AI OCR — GLM-OCR vision model, fully offline after `ollama pull glm-ocr`
-cirax convert scan.png text.txt                    # via GLM-OCR (tesseract fallback)
-cirax convert scan.png notes --to md               # markdown layout preservation
-cirax convert photo.jpg clean.jpg                  # strip EXIF/GPS (exiftool ops route)
-cirax convert win.txt unix.txt                     # CRLF -> LF (dos2unix ops route)
-cirax convert l1.txt u8.txt --engine iconv --preset latin1-utf8   # charset ops
-
-# 3D, VM disks, geospatial (engines optional; doctor shows availability)
-cirax convert model.obj model.glb                  # assimp
-cirax convert disk.qcow2 disk.vdi                  # qemu-img
-cirax convert area.geojson area.gpkg               # GDAL
-
-# watch a folder: new files are converted as they appear
-cirax watch ~/scans -t pdf --out ~/documents
-
-# local web UI — upload in the browser, convert, download
-cirax serve                       # http://127.0.0.1:8400
-
-# sandboxing — default is auto: every job runs in bubblewrap with no
-# network, read-only filesystem, and writes confined to the job workspace
-# and output directory. `--sandbox on` to require it, `off` to disable.
-```
-
-## Status — Phase 4 (packaging & publishing)
-
-Working: engine probing, `doctor` capability matrix, multi-engine chain
-routing, presets, multi-page PDF raster, batch, ffmpeg progress, staged
-archive repacking, office chains (md→docx→pdf via pandoc+LibreOffice),
-ebooks (pandoc + Calibre), metadata stripping, line-ending/charset ops,
-**GLM-OCR** (zai-org's ~1.3B vision model via Ollama — MIT, one
-`ollama pull`, then fully offline; tesseract/ocrmypdf fallback), and:
-
-- **Sandboxed jobs** — when `bwrap` is present (it is, on Arch), every
-  conversion runs in a bubblewrap jail: no network, no IPC, read-only
-  filesystem, writes confined to the job workspace and the output folder.
-  AI engines that talk to the local Ollama daemon opt out explicitly.
-- **`cirax watch`** — point it at a folder and every new file is converted
-  to the target format automatically (state in `.cirax-watch.json`).
-- **3D / VM disks / geospatial** — assimp (obj↔glb↔stl↔ply...),
-  qemu-img (qcow2↔vdi↔vmdk↔vhd), GDAL (geojson↔gpkg↔kml).
-- 31-check smoke suite, sandboxed by default.
-
-- **`cirax serve`** — local web UI (Python stdlib only): drag-and-drop
-  upload, target-format picker, live engine matrix, download the result.
-  Loopback by default; uploads run through the same sandboxed pipeline.
-- **Packaging**: [`packaging/PKGBUILD`](packaging/) + `.SRCINFO` for
-  Arch/AUR; PyPI-ready sdist+wheel (`make publish-pypi`); npm tarball
-  (`make publish-npm`).
-- Flatpak intentionally skipped: Cirax treats engines as *system*
-  dependencies (40+ of them); bundling them per-sandbox would duplicate
-  the distro. Native packaging is the right fit.
-
-Remaining: AUR upload (needs an AUR account), `uv publish` to PyPI and
-`npm publish` (need account tokens), Blender/Piper adapters.
-
-## Layout
-
-```
-src/cirax/
-  cli.py         doctor / formats / detect / plan / presets / convert / watch
-  registry.py    YAML registry loader (formats + engines + presets)
-  probe.py       engine detection, versions, ffmpeg hw-accel
-  sandbox.py     bubblewrap per-job jail (no network, read-only fs)
-  detect.py      input type detection (ext table + file(1))
-  router.py      Dijkstra over the format graph, ranked routes
-  executor.py    template rendering, presets, staged execution, progress
-  data/
-    formats.yaml           format vocabulary + pivots + ext table
-    engines/*.yaml         one file per domain, one stanza per engine
-install.sh      curl installer (uv tool bootstrap)
-npm/            npm wrapper package (bin shim + self-installing core)
-tests/smoke.sh  end-to-end suite
-```
-
-## Adding an engine
+## Adding an Engine
 
 Drop a YAML stanza in `src/cirax/data/engines/` — inputs, outputs, a command
 template, optional per-format flags and presets — and the router picks it up.
+No code.
 
 ```yaml
 - engine: mycodec
@@ -151,3 +166,9 @@ template, optional per-format flags and presets — and the router picks it up.
       priority: 90
       command: "mycodec encode {input} {flags} {output}"
 ```
+
+---
+
+Built by Basel Anaya — Maximlabs.co
+
+<div align="center"><sub>Don't upload. Convert.</sub></div>

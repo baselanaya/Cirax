@@ -155,7 +155,7 @@ if curl -s http://127.0.0.1:8477/ | grep -q "Cirax" \
 else
   fail=$((fail+1)); echo "FAIL  serve"
 fi
-kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
+kill $SRV 2>/dev/null || true; wait $SRV 2>/dev/null || true
 
 echo
 echo "passed: $pass  failed: $fail"

@@ -1,6 +1,6 @@
 [project]
 name = "cirax"
-version = "0.3.1"
+version = "0.4.0"
 description = "Universal local conversion hub — every format to every format, fully offline on Linux"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -11,8 +11,14 @@ dependencies = [
     "rich>=13.0",
 ]
 
+[project.optional-dependencies]
+desktop = ["pyside6>=6.6", "pyinstaller>=6.0"]
+
 [project.scripts]
 cirax = "cirax.cli:main"
+
+[dependency-groups]
+desktop = ["pyside6>=6.6", "pyinstaller>=6.0"]
 
 [build-system]
 requires = ["hatchling"]

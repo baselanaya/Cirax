@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0f14"/>
+      <stop offset="1" stop-color="#101a24"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1668a8"/>
+      <stop offset="1" stop-color="#5ac8fa"/>
+    </linearGradient>
+    <linearGradient id="text" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#dbe4ec"/>
+      <stop offset="1" stop-color="#5ac8fa"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="300" rx="18" fill="url(#bg)"/>
+  <rect x="0" y="292" width="1200" height="8" fill="url(#accent)"/>
+  <g transform="translate(120,150)">
+    <circle r="86" fill="none" stroke="url(#accent)" stroke-width="12"
+            stroke-dasharray="406 134" stroke-linecap="round" transform="rotate(-45)"/>
+    <polygon points="34,0 -22,32 -22,-32" fill="#ffffff"/>
+  </g>
+  <text x="260" y="150" font-family="DejaVu Sans, Arial, sans-serif" font-size="96"
+        font-weight="bold" fill="url(#text)" letter-spacing="14">CIRAX</text>
+  <text x="264" y="210" font-family="DejaVu Sans, Arial, sans-serif" font-size="26"
+        fill="#7d8b99">every format → every format · 100% local · sandboxed</text>
+  <text x="264" y="246" font-family="DejaVu Sans, Arial, sans-serif" font-size="18"
+        fill="#4a5865">don't upload. convert.</text>
+</svg>
