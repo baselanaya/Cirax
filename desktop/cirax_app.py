@@ -2,8 +2,10 @@
 
 Drag files anywhere, pick a target, watch the queue. Uses the exact
 registry, router and sandboxed executor as the CLI; nothing leaves the
-machine. Workers are QRunnables that can never take the app down; native
-crashes leave a faulthandler trace in ~/.local/state/cirax/.
+machine. The target list is built from what the dropped files actually
+are — you only ever see formats they can truly become. Workers are
+QRunnables that can never take the app down; native crashes leave a
+faulthandler trace in ~/.local/state/cirax/.
 """
 
 from __future__ import annotations
@@ -88,9 +90,8 @@ class ConversionJob(QRunnable):
     def run(self):  # worker thread
         total = max(len(self.plan.steps), 1)
         try:
-            for i, step in enumerate(self.plan.steps):
-                self.signals.progress.emit(str(self.src),
-                                           int(i / total * 100))
+            for i in range(total):
+                self.signals.progress.emit(str(self.src), int(i / total * 100))
             execute(self.plan, self.reg, self.src, self.dst, quiet=True,
                     sandbox=self.sandbox, preset=self.preset)
             self.signals.progress.emit(str(self.src), 100)
@@ -105,9 +106,13 @@ class MainWindow(QMainWindow):
         self.reg = load()
         probe_all(self.reg)
         STATE_DIR.mkdir(parents=True, exist_ok=True)
-        faulthandler.enable(open(STATE_DIR / "crash.log", "w"))
+        self._crash_log = open(STATE_DIR / "crash.log", "w")
+        faulthandler.enable(self._crash_log)
         self.pool = QThreadPool.globalInstance()
         self.pool.setMaxThreadCount(max(2, self.pool.maxThreadCount() // 2))
+        self._pending: list[str] = []
+        self._reach: dict[str, dict] = {}
+        self._row_by_src: dict[str, int] = {}
         self.setWindowTitle("Cirax — universal local conversion hub")
         self.resize(1020, 680)
         self.setAcceptDrops(True)
@@ -117,11 +122,12 @@ class MainWindow(QMainWindow):
 
     # ---------- look ----------
     def _icon(self):
-        for cand in (Path(sys._MEIPASS) / "cirax.png"  # type: ignore[attr-defined]
-                     if hasattr(sys, "_MEIPASS") else None,
-                     Path(__file__).parent.parent / "assets" / "cirax.png",
-                     Path("/usr/share/icons/hicolor/256x256/apps/cirax.png")):
-            if cand and cand.exists():
+        cands = [Path("/usr/share/icons/hicolor/256x256/apps/cirax.png")]
+        if hasattr(sys, "_MEIPASS"):
+            cands.insert(0, Path(sys._MEIPASS) / "cirax.png")  # type: ignore
+        cands.append(Path(__file__).resolve().parent.parent / "assets" / "cirax.png")
+        for cand in cands:
+            if cand.exists():
                 self.setWindowIcon(QIcon(str(cand)))
                 break
 
@@ -166,7 +172,7 @@ class MainWindow(QMainWindow):
             "drag & drop files anywhere — or click to browse\n"
             "webp · heic · raw · docx · epub · pdf · mp4 · flac · zip · glb …")
         self.drop.setAlignment(Qt.AlignCenter)
-        self.drop.setFixedHeight(92)
+        self.drop.setFixedHeight(88)
         self.drop.setStyleSheet(
             "border: 2px dashed #33424f; border-radius: 10px; color: #9fb0bf;"
             "background: #131a21;")
@@ -177,29 +183,35 @@ class MainWindow(QMainWindow):
         self.files_list.setWordWrap(True)
         v.addWidget(self.files_list)
 
-        opts = QHBoxLayout()
-        opts.addWidget(QLabel("Convert to:"))
+        self.detected_label = QLabel("")
+        self.detected_label.setObjectName("tagline")
+        self.detected_label.setWordWrap(True)
+        v.addWidget(self.detected_label)
+
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Convert to:"))
         self.target = QComboBox()
-        groups: dict[str, list] = {}
-        for f in self.reg.formats.values():
-            if f.mime != "application/x-tree":
-                groups.setdefault(f.domain, []).append(f)
-        for dom in sorted(groups):
-            for f in sorted(groups[dom], key=lambda x: x.ext):
-                self.target.addItem(f"[{dom}] .{f.ext}", f.mime)
-        opts.addWidget(self.target, stretch=3)
-        opts.addWidget(QLabel("Preset:"))
+        self.target.setEnabled(False)
+        self.target.addItem("add files to see possible targets", "")
+        self.target.currentIndexChanged.connect(self._target_hint)
+        self.target.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+        row.addWidget(self.target, stretch=1)
+        v.addLayout(row)
+
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel("Preset:"))
         self.preset = QComboBox()
         self.preset.addItem("default")
         for e in self.reg.engines:
             for name in e.presets:
                 self.preset.addItem(f"{name} ({e.name})")
-        opts.addWidget(self.preset, stretch=2)
+        row2.addWidget(self.preset, stretch=2)
         self.sandbox_box = QCheckBox("Sandbox")
         self.sandbox_box.setChecked(True)
         self.sandbox_box.setToolTip("bubblewrap jail: no network, read-only fs")
-        opts.addWidget(self.sandbox_box)
-        v.addLayout(opts)
+        row2.addWidget(self.sandbox_box)
+        row2.addStretch()
+        v.addLayout(row2)
 
         self.jobs = QTableWidget(0, 5)
         self.jobs.setHorizontalHeaderLabels(
@@ -215,6 +227,7 @@ class MainWindow(QMainWindow):
         self.go = QPushButton("Convert")
         self.go.setObjectName("primary")
         self.go.setFixedHeight(38)
+        self.go.setEnabled(False)
         self.go.clicked.connect(self._convert)
         self.status = QLabel("ready")
         self.status.setObjectName("status")
@@ -247,8 +260,7 @@ class MainWindow(QMainWindow):
     def _fill_engines(self):
         needle = self.filter.text().lower()
         rows = [e for e in self.reg.engines
-                if needle in e.name.lower()
-                or needle in e.binary.lower()]
+                if needle in e.name.lower() or needle in e.binary.lower()]
         inst = sum(1 for e in rows if e.installed)
         self.engines_table.setRowCount(len(rows))
         for i, e in enumerate(rows):
@@ -260,6 +272,63 @@ class MainWindow(QMainWindow):
                 ", ".join(e.categories)))
         self.counts.setText(f"{inst}/{len(rows)} engines shown · "
                             f"{len(self.reg.formats)} formats in vocabulary")
+
+    # ---------- detected formats -> smart target list ----------
+    def _refresh_targets(self):
+        self.target.clear()
+        self._reach = {}
+        if not self._pending:
+            self.target.addItem("add files to see possible targets", "")
+            self.target.setEnabled(False)
+            self.go.setEnabled(False)
+            self._target_hint()
+            return
+        self.target.setEnabled(True)
+
+        src_mimes: dict[str, str] = {}
+        for p in self._pending:
+            mime, _ = detect(Path(p), self.reg.ext_to_mime)
+            src_mimes[p] = mime
+        src_set = set(src_mimes.values())
+        for p in self._pending:
+            mime = src_mimes[p]
+            for t_mime, plan in reachable(self.reg, mime).items():
+                if t_mime in src_set:
+                    continue  # never offer converting a file to itself
+                cur = self._reach.get(t_mime)
+                if cur is None or plan.cost < cur["plan"].cost:
+                    self._reach[t_mime] = {"plan": plan}
+
+        by_domain: dict[str, list] = {}
+        for mime, info in self._reach.items():
+            plan = info["plan"]
+            dom = mime.split("/")[0]
+            ext = self.reg.ext_for(mime)
+            loss = "lossless" if plan.lossless else "lossy"
+            by_domain.setdefault(dom, []).append(
+                (plan.cost, ext, mime, " → ".join(plan.engines), loss))
+        n = 0
+        for dom in sorted(by_domain):
+            for cost, ext, mime, chain, loss in sorted(by_domain[dom]):
+                self.target.addItem(f"[{dom}] .{ext}   ·   via {chain}   ·   "
+                                    f"{loss}", mime)
+                n += 1
+        if n == 0:
+            self.target.addItem("no conversion targets found", "")
+            self.go.setEnabled(False)
+        else:
+            self.go.setEnabled(True)
+        self._target_hint()
+
+    def _target_hint(self):
+        mime = self.target.currentData()
+        info = self._reach.get(mime) if mime else None
+        if info:
+            plan = info["plan"]
+            loss = "lossless" if plan.lossless else "lossy"
+            self.status.setText(f"route: {' → '.join(plan.engines)} · {loss}")
+        elif not self._pending:
+            self.status.setText("ready")
 
     # ---------- drag & drop ----------
     def dragEnterEvent(self, event: QDragEnterEvent):
@@ -275,8 +344,7 @@ class MainWindow(QMainWindow):
         self._add_paths(names)
 
     def _add_paths(self, names):
-        self._pending = [p for p in getattr(self, "_pending", [])
-                         if Path(p).exists()]
+        self._pending = [p for p in self._pending if Path(p).exists()]
         for n in names:
             if n and n not in self._pending:
                 self._pending.append(n)
@@ -285,20 +353,37 @@ class MainWindow(QMainWindow):
             extra = f" … +{len(self._pending) - 6}" if len(self._pending) > 6 else ""
             self.files_list.setText(
                 f"<b>{len(self._pending)}</b> file(s): {shown}{extra}")
+        self._refresh_targets()
+        self._refresh_detected()
+
+    def _refresh_detected(self):
+        parts = []
+        for p in self._pending:
+            mime, _ = detect(Path(p), self.reg.ext_to_mime)
+            fmt = self.reg.formats.get(mime)
+            parts.append(f"<b>{Path(p).name}</b> "
+                         f"<span style='color:#7d8b99'>({fmt.name or mime})</span>")
+        self.detected_label.setText(
+            "detected: " + " · ".join(parts) if parts
+            else "detected formats will appear here")
 
     # ---------- conversion ----------
     def _convert(self):
-        paths = [Path(p) for p in getattr(self, "_pending", [])]
+        paths = [Path(p) for p in self._pending]
         if not paths:
             self.status.setText("add at least one file")
             return
         dst_mime = self.target.currentData()
+        if not dst_mime:
+            self.status.setText("pick a target format first")
+            return
         preset = self.preset.currentText().split(" (")[0]
         preset = None if preset == "default" else preset
         sandbox = "auto" if self.sandbox_box.isChecked() else "off"
 
         self.jobs.setRowCount(0)
-        runnable = []
+        self._row_by_src = {}
+        queued = 0
         for src in paths:
             mime, _ = detect(src, self.reg.ext_to_mime)
             plan = find_plan(self.reg, mime, dst_mime)
@@ -306,52 +391,65 @@ class MainWindow(QMainWindow):
                 self.status.setText(f"no route for {src.name} ({mime})")
                 continue
             dst = src.with_suffix("." + self.reg.ext_for(dst_mime))
+            if dst == src:
+                self.status.setText(f"skip {src.name}: pick a different target")
+                continue
             row = self.jobs.rowCount()
             self.jobs.insertRow(row)
             self.jobs.setItem(row, 0, QTableWidgetItem(src.name))
-            self.jobs.setItem(row, 1, QTableWidgetItem(
-                " → ".join(plan.engines)))
+            self.jobs.setItem(row, 1, QTableWidgetItem(" → ".join(plan.engines)))
             bar = QProgressBar()
             bar.setRange(0, 100)
             self.jobs.setCellWidget(row, 2, bar)
             self.jobs.setItem(row, 3, QTableWidgetItem("queued"))
-            runnable.append((src, dst, plan, row))
-
-        def on_done(src_path: str, ok: bool, msg: str):
-            for row in range(self.jobs.rowCount()):
-                if self.jobs.item(row, 0).text() == Path(src_path).name:
-                    self.jobs.setItem(row, 3, QTableWidgetItem(
-                        "done" if ok else "failed"))
-                    self.jobs.item(row, 3).setForeground(
-                        QColor("#7fd18b" if ok else "#ff8484"))
-                    if ok:
-                        btn = QPushButton("open")
-                        btn.setObjectName("open")
-                        btn.clicked.connect(
-                            lambda _=False, p=Path(msg):
-                            QDesktopServices.openUrl(
-                                QUrl.fromLocalFile(str(p))))
-                        self.jobs.setCellWidget(row, 4, btn)
-                    else:
-                        self.jobs.setItem(row, 4, QTableWidgetItem(
-                            msg.splitlines()[-1][:80] if msg else ""))
-                    break
-
-        for src, dst, plan, row in runnable:
+            self._row_by_src[str(src)] = row
             job = ConversionJob(self.reg, src, dst, plan, sandbox, preset)
             job.signals.progress.connect(self._job_progress)
-            job.signals.done.connect(on_done)
-            self.jobs.item(row, 3).setText("running")
+            job.signals.done.connect(self._job_done)
             self.pool.start(job)
-        self.status.setText(f"converting {len(runnable)} file(s)…")
+            queued += 1
+        self.status.setText(f"converting {queued} file(s)…" if queued
+                            else "nothing to convert")
 
-    def _job_progress(self, src_name: str, pct: int):
-        for row in range(self.jobs.rowCount()):
-            if self.jobs.item(row, 0).text() == Path(src_name).name:
-                bar = self.jobs.cellWidget(row, 2)
-                if bar:
-                    bar.setValue(pct)
-                break
+    def _row_for(self, src_path: str) -> int | None:
+        row = self._row_by_src.get(src_path)
+        if row is not None and row < self.jobs.rowCount():
+            return row
+        return None
+
+    def _job_progress(self, src_path: str, pct: int):
+        row = self._row_for(src_path)
+        if row is not None:
+            bar = self.jobs.cellWidget(row, 2)
+            if bar:
+                bar.setValue(pct)
+
+    def _job_done(self, src_path: str, ok: bool, msg: str):
+        row = self._row_for(src_path)
+        if row is None:
+            return
+        self.jobs.setItem(row, 3, QTableWidgetItem("done" if ok else "failed"))
+        self.jobs.item(row, 3).setForeground(
+            QColor("#7fd18b") if ok else QColor("#ff8484"))
+        if ok:
+            out = Path(msg)
+            self.jobs.setItem(row, 4, QTableWidgetItem(out.name))
+            btn = QPushButton("open")
+            btn.setObjectName("open")
+            btn.setToolTip(str(out))
+            btn.clicked.connect(lambda _=False, p=out: self._open(p))
+            self.jobs.setCellWidget(row, 4, btn)
+            self.status.setText(f"done: {out.name}")
+        else:
+            self.jobs.setItem(row, 4, QTableWidgetItem(
+                msg.splitlines()[-1][:90] if msg else "error"))
+            self.status.setText("conversion failed — see the jobs table")
+
+    def _open(self, path: Path):
+        if not path.exists() or path.stat().st_size == 0:
+            self.status.setText(f"result missing or empty: {path}")
+            return
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
 
 def main():

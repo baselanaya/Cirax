@@ -43,7 +43,10 @@ class Plan:
 
 
 def _edge_cost(route: Route) -> float:
-    return 1.0 + (0.0 if route.lossless else 0.5) + (100 - route.priority) / 100
+    cost = 1.0 + (0.0 if route.lossless else 0.5) + (100 - route.priority) / 100
+    if TREE_FMT in route.from_formats or TREE_FMT in route.to_formats:
+        cost += 3.0  # staged tree routes (archive extract/create) sink low
+    return cost
 
 
 def _adjacency(reg: Registry, fmt: str,

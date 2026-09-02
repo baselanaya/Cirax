@@ -264,6 +264,10 @@ def execute(plan: Plan, reg: Registry, src_path: Path, dst_path: Path,
     dst_path = dst_path.resolve()
     if not plan.steps:
         raise ConversionError("empty plan: nothing to execute")
+    if src_path == dst_path:
+        raise ConversionError(
+            "refusing to write output over the input file "
+            "(use a metadata-strip ops route with a different output name)")
     cleanup = False
     if workdir is None:
         workdir = Path(tempfile.mkdtemp(prefix="cirax-"))
