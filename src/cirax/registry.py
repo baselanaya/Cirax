@@ -32,6 +32,9 @@ class Route:
     # {output_pattern} (plain prefix, e.g. pdftoppm) or {output_printf}
     # (printf-style, e.g. gs -sOutputFile=prefix-%02d)
     progress: str | None = None  # "ffmpeg": parse -progress pipe:1
+    output_from: str | None = None  # "stdout": capture engine stdout as output
+    ops: bool = False  # same-format operation (strip metadata, line endings)
+    post: str | None = None  # post-process captured stdout: "strip_fences"
 
     def matches_input(self, fmt: str) -> bool:
         if "*" in self.from_formats:
@@ -69,6 +72,8 @@ class Engine:
     version_regex: str = ""
     package: str | None = None
     note: str | None = None
+    setup_hint: str | None = None  # shown by doctor when binary present but
+    # the engine needs one-time setup (e.g. pulling a model)
     routes: list[Route] = field(default_factory=list)
     presets: dict[str, dict[str, object]] = field(default_factory=dict)
     # filled in by the prober:
@@ -125,6 +130,9 @@ def _build_route(d: dict) -> Route:
         multipage=bool(d.get("multipage", False)),
         command_multipage=d.get("command_multipage"),
         progress=d.get("progress"),
+        output_from=d.get("output_from"),
+        ops=bool(d.get("ops", False)),
+        post=d.get("post"),
     )
 
 
@@ -139,6 +147,7 @@ def _build_engine(d: dict) -> Engine:
         version_regex=probe.get("version_regex", ""),
         package=d.get("package"),
         note=d.get("note"),
+        setup_hint=d.get("setup_hint"),
         routes=[_build_route(r) for r in d.get("routes", [])],
         presets=dict(d.get("presets", {})),
     )

@@ -1,0 +1,64 @@
+# AI engines (all offline after one-time model download).
+#
+# GLM-OCR (zai-org, MIT, ~1.3B params) runs through Ollama: no torch in our
+# venv, automatic GPU/CPU selection, one `ollama pull` then fully offline.
+# Tesseract stays registered for searchable-PDF OCR (ocrmypdf) and as the
+# fallback when no model is pulled.
+
+engines:
+  - engine: glm-ocr
+    binary: ollama
+    package: ollama ollama-cuda
+    description: "GLM-OCR vision model (zai-org, MIT) — state-of-the-art local OCR via Ollama"
+    categories: [image, document, ai]
+    setup_hint: "ollama pull glm-ocr   # ~1 GB, one time; fully offline afterwards"
+    probe:
+      args: [list]
+      version_regex: 'glm-ocr[^\s]*'
+    routes:
+      - from: [image/png, image/jpeg, image/tiff, image/bmp, image/webp,
+               image/gif, image/avif, image/jxl, image/heic]
+        to: [text/plain]
+        lossless: false
+        priority: 95
+        output_from: stdout
+        post: strip_fences
+        note: beats tesseract on real documents; needs the glm-ocr model pulled
+        command: "ollama run glm-ocr {prompt} {input}"
+        vars:
+          prompt:
+            text/plain: "Text Recognition:"
+      - from: [image/png, image/jpeg, image/tiff, image/bmp, image/webp,
+               image/gif, image/avif, image/jxl, image/heic]
+        to: [text/markdown]
+        lossless: false
+        priority: 95
+        output_from: stdout
+        post: strip_fences
+        note: document parsing mode — preserves headings, lists, tables
+        command: "ollama run glm-ocr {prompt} {input}"
+        vars:
+          prompt:
+            text/markdown: "OCR this document. Transcribe all content and preserve the layout structure (headings, lists, tables) in Markdown."
+
+  - engine: whisper
+    binary: ollama
+    package: ollama ollama-cuda
+    description: Offline speech-to-text (audio/video to SRT/VTT/TXT)
+    categories: [audio, subtitle, ai]
+    setup_hint: "ollama pull whisper   # then: cirax convert talk.mp3 -t srt"
+    probe:
+      args: [list]
+      version_regex: 'whisper[^\s:]*'
+    routes:
+      - from: [audio/*, video/*]
+        to: [text/plain, application/x-subrip]
+        lossless: false
+        priority: 80
+        output_from: stdout
+        note: transcription via Ollama's whisper; ffmpeg routes extract audio first if needed
+        command: "ollama run whisper {prompt} {input}"
+        vars:
+          prompt:
+            text/plain: "Transcribe this audio."
+            application/x-subrip: "Transcribe this audio with timestamps in SRT format."

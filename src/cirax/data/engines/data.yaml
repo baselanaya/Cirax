@@ -105,13 +105,37 @@ engines:
     package: glibc
     description: Text encoding converter (UTF-8, Latin-1, Shift-JIS, ...)
     categories: [data]
-    note: charset operations — adapter with charset options pending (Phase 2)
     probe: {args: [--version], version_regex: 'iconv \(GLIBC[^)]*\) ([^\s]+)'}
+    presets:
+      utf8-latin1: {fcharset: "UTF-8", tcharset: "ISO-8859-1"}
+      latin1-utf8: {fcharset: "ISO-8859-1", tcharset: "UTF-8"}
+      sjis-utf8: {fcharset: "SHIFT-JIS", tcharset: "UTF-8"}
+      utf8-sjis: {fcharset: "UTF-8", tcharset: "SHIFT-JIS"}
+    routes:
+      - from: [text/plain, text/markdown, text/csv, application/xml,
+               text/html]
+        to: [text/plain, text/markdown, text/csv, application/xml, text/html]
+        lossless: false
+        priority: 40
+        ops: true
+        output_from: stdout
+        note: same format, transcoded charset; pick direction via --preset
+        command: "iconv -f {fcharset} -t {tcharset} {input}"
+        vars:
+          fcharset: "UTF-8"
+          tcharset: "UTF-8"
 
   - engine: dos2unix
     binary: dos2unix
     package: dos2unix
     description: Line-ending converter
     categories: [data]
-    note: text operations — adapter pending (Phase 2)
     probe: {args: [--version], version_regex: 'dos2unix ([^\s]+)'}
+    routes:
+      - from: [text/plain, text/markdown, text/csv]
+        to: [text/plain, text/markdown, text/csv]
+        lossless: true
+        priority: 50
+        ops: true
+        note: CRLF/CR to LF (and unix2dos semantics via --to --preset in future)
+        command: "dos2unix -n {input} {output}"

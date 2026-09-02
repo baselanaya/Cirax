@@ -46,13 +46,18 @@ def _edge_cost(route: Route) -> float:
     return 1.0 + (0.0 if route.lossless else 0.5) + (100 - route.priority) / 100
 
 
-def _adjacency(reg: Registry, fmt: str) -> list[tuple[str, Step, float]]:
+def _adjacency(reg: Registry, fmt: str,
+               engine_filter: str | None = None) -> list[tuple[str, Step, float]]:
     """All (target_format, step, cost) edges leaving `fmt` via installed engines."""
     edges = []
     for engine in reg.engines:
         if not engine.installed or not engine.executable:
             continue
+        if engine_filter is not None and engine.name != engine_filter:
+            continue
         for route in engine.routes:
+            if route.ops:
+                continue  # same-format ops are resolved only by find_plan
             if not route.matches_input(fmt):
                 continue
             for target in route.to_formats:
@@ -63,21 +68,44 @@ def _adjacency(reg: Registry, fmt: str) -> list[tuple[str, Step, float]]:
     return edges
 
 
-def find_plan(reg: Registry, src: str, dst: str) -> Plan | None:
-    """Dijkstra over the format graph, max MAX_HOPS engine invocations."""
+def find_plan(reg: Registry, src: str, dst: str,
+              engine_filter: str | None = None) -> Plan | None:
+    """Dijkstra over the format graph, max MAX_HOPS engine invocations.
+
+    For src == dst, only same-format `ops` routes (strip metadata, line
+    endings, transcode charset) qualify; otherwise there is nothing to do.
+    `engine_filter` restricts routing to a single named engine (used by
+    `--engine` when several ops engines share a format pair).
+    """
+
+    def allowed(engine: Engine) -> bool:
+        return (engine.installed and engine.executable
+                and (engine_filter is None or engine.name == engine_filter))
+
     if src == dst:
-        return Plan(src, dst, [], 0.0)
+        candidates = []
+        for engine in reg.engines:
+            if not allowed(engine):
+                continue
+            for route in engine.routes:
+                if route.ops and route.matches_input(src) and src in route.to_formats:
+                    candidates.append((_edge_cost(route),
+                                       Step(engine, route, src)))
+        if not candidates:
+            return None
+        cost, step = min(candidates, key=lambda pair: pair[0])
+        return Plan(src, dst, [step], cost)
     best: dict[str, tuple[float, int]] = {src: (0.0, 0)}
     heap: list[tuple[float, int, str, list[Step]]] = [(0.0, 0, src, [])]
     while heap:
         cost, hops, fmt, path = heapq.heappop(heap)
         if best.get(fmt, (float("inf"), 99)) < (cost, hops):
             continue
-        if fmt == dst:
+        if fmt == dst and path:
             return Plan(src, dst, path, cost)
         if hops >= MAX_HOPS:
             continue
-        for target, step, step_cost in _adjacency(reg, fmt):
+        for target, step, step_cost in _adjacency(reg, fmt, engine_filter):
             nc, nh = cost + step_cost, hops + 1
             if best.get(target, (float("inf"), 99)) <= (nc, nh):
                 continue

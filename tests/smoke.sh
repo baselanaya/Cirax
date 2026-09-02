@@ -24,6 +24,8 @@ echo "== samples =="
 ffmpeg -y -hide_banner -loglevel error -f lavfi -i testsrc=duration=1:size=320x240:rate=10 -f lavfi -i sine=duration=1 -c:v libx264 -pix_fmt yuv420p -c:a aac sample.mp4
 ffmpeg -y -hide_banner -loglevel error -f lavfi -i sine=duration=1 -c:a pcm_s16le sample.wav
 magick -size 200x100 gradient:blue-green sample.png
+magick -size 100x50 gradient:red-blue photo.jpg
+magick -size 200x200 gradient:green-blue big.png
 printf 'hello cirax\nsecond line\n' > doc.txt
 printf '%%!PS\n/Helvetica findfont 24 scalefont setfont 72 720 moveto (Hello Cirax) show showpage 72 700 moveto (Page Two) show showpage\n' > doc.ps
 
@@ -65,6 +67,41 @@ magick -size 30x20 xc:blue b2.png
 "$CIRAX" convert -q b1.png b2.png -t jpg
 if [ -f b1.jpg ] && [ -f b2.jpg ]; then pass=$((pass+1)); echo "  ok  batch convert"
 else fail=$((fail+1)); echo "FAIL  batch convert"; fi
+
+echo "== phase 2: office / ebooks / ops / AI OCR =="
+printf '# Hello Doc\n\nSome **bold** text.\n' > doc.md
+"$CIRAX" convert -q doc.md doc.docx &&        check "md->docx (pandoc)"        doc.docx application/vnd.openxml
+"$CIRAX" convert -q doc.docx doc.pdf &&       check "docx->pdf (libreoffice)"  doc.pdf application/pdf
+"$CIRAX" convert -q doc.md book.epub &&       check "md->epub (pandoc)"        book.epub application/epub
+if "$CIRAX" convert -q book.epub book.azw3 && test -s book.azw3; then
+  pass=$((pass+1)); echo "  ok  epub->azw3 (calibre)"
+else
+  fail=$((fail+1)); echo "FAIL  epub->azw3"
+fi
+"$CIRAX" convert -q photo.jpg clean.jpg &&    check "jpeg metadata strip (exiftool)" clean.jpg image/jpeg
+"$CIRAX" convert -q big.png quant.png &&      check "png->png quantize (pngquant)" quant.png image/png
+printf 'a\r\nb\r\n' > win.txt
+if "$CIRAX" convert -q win.txt unix.txt && od -c unix.txt | grep -q 'a  \\n'; then
+  pass=$((pass+1)); echo "  ok  dos2unix ops route"
+else
+  fail=$((fail+1)); echo "FAIL  dos2unix"
+fi
+printf 'caf\xe9\n' > l1.txt
+if "$CIRAX" convert -q l1.txt u8.txt --engine iconv --preset latin1-utf8 && od -c u8.txt | grep -q '303 251'; then
+  pass=$((pass+1)); echo "  ok  iconv charset preset"
+else
+  fail=$((fail+1)); echo "FAIL  iconv preset"
+fi
+if ollama list 2>/dev/null | grep -q glm-ocr; then
+  magick -size 500x120 xc:white -pointsize 28 -fill black -annotate +30+60 "Cirax OCR Test 42" ocr.png
+  if "$CIRAX" convert -q ocr.png ocr-out.txt && grep -q "Cirax OCR Test 42" ocr-out.txt; then
+    pass=$((pass+1)); echo "  ok  GLM-OCR image->text"
+  else
+    fail=$((fail+1)); echo "FAIL  GLM-OCR"
+  fi
+else
+  echo "skip  GLM-OCR (model not pulled; run: ollama pull glm-ocr)"
+fi
 
 echo
 echo "passed: $pass  failed: $fail"

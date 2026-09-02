@@ -35,7 +35,9 @@ def probe_engine(engine: Engine, timeout: int = 15) -> None:
         if engine.version_regex:
             m = re.search(engine.version_regex, text)
             if m:
-                engine.version = m.group(1)
+                # regexes without a capture group report the whole match
+                # (used to detect presence, e.g. a pulled ollama model)
+                engine.version = m.group(1) if m.groups() else m.group(0)
     except (OSError, subprocess.SubprocessError):
         pass
 

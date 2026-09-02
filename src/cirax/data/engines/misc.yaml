@@ -97,15 +97,6 @@ engines:
             application/vnd.google-earth.kml+xml: KML
             application/geopackage+sqlite3: GPKG
 
-  - engine: whisper
-    binary: whisper-cli
-    package: whisper.cpp-cublas
-    description: Offline speech-to-text (audio/video to SRT/VTT/TXT)
-    categories: [audio, subtitle]
-    note: requires a local GGML model; adapter pending (Phase 3).
-          FFmpeg 8's built-in whisper filter is the alternative path.
-    probe: {}
-
   - engine: piper
     binary: piper
     package: piper-tts-bin

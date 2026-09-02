@@ -70,6 +70,13 @@ def cmd_doctor(args) -> int:
         print("\nMissing engines (Arch package hints):")
         for e in missing:
             print(f"  sudo pacman -S --needed {e.package}   # {e.name} ({e.binary})")
+
+    unsetup = [e for e in reg.engines
+               if e.installed and e.setup_hint and not e.version]
+    if unsetup:
+        print("\nOne-time setup available:")
+        for e in unsetup:
+            print(f"  {e.name}: {e.setup_hint}")
     return 0
 
 
@@ -144,9 +151,11 @@ def cmd_plan(args) -> int:
     if not dst_mime:
         print(f"error: unknown target format '{target}'", file=sys.stderr)
         return 1
-    plan = find_plan(reg, src_mime, dst_mime)
+    plan = find_plan(reg, src_mime, dst_mime, engine_filter=args.engine)
     if plan is None:
-        print(f"no route from {src_mime} to {dst_mime}", file=sys.stderr)
+        print(f"no route from {src_mime} to {dst_mime}"
+              + (f" for engine '{args.engine}'" if args.engine else ""),
+              file=sys.stderr)
         return 2
     _show_plan(reg, plan, src_path, src_path.with_suffix("." + reg.ext_for(dst_mime)))
     return 0
@@ -180,13 +189,18 @@ def _convert_one(reg, args, src_path: Path, dst_path: Path) -> int:
         print("error: output is the same file as input", file=sys.stderr)
         return 1
 
-    plan = find_plan(reg, src_mime, dst_mime)
+    plan = find_plan(reg, src_mime, dst_mime, engine_filter=args.engine)
     if plan is None:
         reach = reachable(reg, src_mime)
-        print(f"no route from {src_mime} to {dst_mime}.", file=sys.stderr)
+        print(f"no route from {src_mime} to {dst_mime}", file=sys.stderr)
         if reach:
             print("Reachable targets: " + ", ".join(
                 "." + reg.ext_for(m) for m in sorted(reach)), file=sys.stderr)
+        return 2
+    if args.engine and plan.engines != [args.engine]:
+        print(f"error: engine '{args.engine}' cannot run this route "
+              f"(router chose {' -> '.join(plan.engines) or 'nothing'})",
+              file=sys.stderr)
         return 2
 
     if not args.quiet:
@@ -277,6 +291,7 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("input")
     pl.add_argument("to", nargs="?", help="target extension or MIME "
                                           "(omit to list reachable targets)")
+    pl.add_argument("--engine", help="restrict the route to a specific engine")
     pl.set_defaults(func=cmd_plan)
 
     c = sub.add_parser("convert", help="convert one or many files")
@@ -284,6 +299,8 @@ def build_parser() -> argparse.ArgumentParser:
                     "inputs and no --to, the last argument is the output path")
     c.add_argument("-t", "--to", help="target extension")
     c.add_argument("-P", "--preset", help="engine preset (see: cirax presets)")
+    c.add_argument("--engine", help="force a specific engine (e.g. iconv vs "
+                                    "dos2unix, tesseract vs glm-ocr)")
     c.add_argument("--pages", default="first", metavar="N|M-K|all",
                    help="for pdf->image routes: first (default), all, "
                         "a page number, or a range")

@@ -252,5 +252,14 @@ engines:
     package: perl-image-exiftool
     description: Read/write/strip metadata across hundreds of formats
     categories: [metadata]
-    note: metadata operations, not format conversion — adapter pending (Phase 2)
     probe: {args: [-ver], version_regex: '([^\s]+)'}
+    routes:
+      - from: [image/jpeg, image/png, image/tiff, image/webp, image/heic,
+               image/avif, image/jxl, application/pdf]
+        to: [image/jpeg, image/png, image/tiff, image/webp, image/heic,
+             image/avif, image/jxl, application/pdf]
+        lossless: true
+        priority: 90
+        ops: true
+        note: strips EXIF/GPS/XMP — pixel data untouched; same format in and out
+        command: "exiftool -q -all= -overwrite_original_in-place -o {output} {input}"

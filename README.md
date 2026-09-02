@@ -2,7 +2,8 @@
 
 **Universal local conversion hub for Linux.** Every format to every format,
 fully offline, by routing between best-in-class open-source engines
-(FFmpeg, libvips, ImageMagick, LibreOffice, Pandoc, Calibre, 7-Zip, qpdf...).
+(FFmpeg, libvips, ImageMagick, LibreOffice, Pandoc, Calibre, 7-Zip, qpdf...)
+plus modern local AI models (GLM-OCR vision OCR via Ollama).
 
 Cirax doesn't reimplement codecs — it *composes* engines. A declarative YAML
 registry describes what each installed engine can read and write; a router
@@ -49,21 +50,32 @@ cirax convert report.docx png        # docx -> pdf (libreoffice) -> png (pdftopp
 cirax convert song.flac -t opus      # via ffmpeg
 cirax convert video.mov out.mkv --preset web720     # quality presets
 cirax convert doc.pdf page.png --pages all          # all pages -> page-01.png, ...
-cirax convert doc.pdf page.png --pages 2-5          # page ranges
 cirax convert a.png b.png c.png -t webp             # batch
 cirax convert photos.zip out.7z      # extract -> recreate (staged)
+
+# AI OCR — GLM-OCR vision model, fully offline after `ollama pull glm-ocr`
+cirax convert scan.png text.txt                    # via GLM-OCR (tesseract fallback)
+cirax convert scan.png notes --to md               # markdown layout preservation
+cirax convert photo.jpg clean.jpg                  # strip EXIF/GPS (exiftool ops route)
+cirax convert win.txt unix.txt                     # CRLF -> LF (dos2unix ops route)
+cirax convert l1.txt u8.txt --engine iconv --preset latin1-utf8   # charset ops
 ```
 
 Every route is tagged `lossless`/`lossy` before it runs. Chained conversions
 stage intermediates in a private temp directory that is always cleaned up.
-Long ffmpeg jobs show live progress.
+Long ffmpeg jobs show live progress. `--engine` forces a specific engine when
+several cover the same pair (e.g. `tesseract` vs `glm-ocr`).
 
-## Status — Phase 1 (MVP breadth)
+## Status — Phase 2 (breadth)
 
-Working: engine probing, `doctor` capability matrix, input detection, route
-planning (multi-engine chains), conversions for all registry routes, quality
-presets, multi-page PDF rasterization, batch mode, ffmpeg progress, staged
-archive repacking, uv-managed dev workflow, curl installer, npm wrapper.
+Working: engine probing, `doctor` capability matrix (43/58 engines on the
+dev machine), input detection, multi-engine chain routing, presets,
+multi-page PDF raster, batch, ffmpeg progress, staged archive repacking,
+office chains (md→docx→pdf via pandoc+LibreOffice), ebooks (pandoc +
+Calibre: epub/mobi/azw3/fb2/cbz), metadata stripping, line-ending and
+charset ops, and **GLM-OCR** (zai-org's ~1.3B vision model via Ollama —
+MIT, one `ollama pull`, then fully offline) with tesseract/ocrmypdf as
+fallback and searchable-PDF path.
 
 ## Layout
 

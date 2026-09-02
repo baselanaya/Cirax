@@ -22,6 +22,15 @@ from .router import Plan, Step
 
 FLAG_VARS = {"flags", "input_flags", "output_flags"}
 _PLACEHOLDER = re.compile(r"\{(\w+)\}")
+_FENCE_LINE = re.compile(r"^\s*```[\w-]*\s*$")
+
+
+def _strip_fences(text: str) -> str:
+    """Clean LLM OCR output: drop bare code-fence lines, collapse blanks."""
+    lines = [ln for ln in text.splitlines() if not _FENCE_LINE.match(ln)]
+    out = "\n".join(lines).strip("\n")
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out + "\n" if out else ""
 
 
 class ConversionError(RuntimeError):
@@ -164,6 +173,14 @@ def _fmt_time(sec: float) -> str:
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
+def _step_error(step: Step, proc: subprocess.CompletedProcess) -> str:
+    msg = (proc.stderr or proc.stdout or "").strip()[-2000:]
+    engine = step.engine
+    if engine.setup_hint and engine.version is None:
+        msg += f"\nhint: {engine.setup_hint}"
+    return (f"{engine.name} failed (exit {proc.returncode}):\n{msg}")
+
+
 def _run_with_progress(argv: list[str], src: Path) -> subprocess.CompletedProcess:
     """Run a process streaming ffmpeg-style `-progress pipe:1` output."""
     total = None
@@ -222,6 +239,8 @@ def execute(plan: Plan, reg: Registry, src_path: Path, dst_path: Path,
     step writes dst_path directly. Returns per-step results for logging."""
     src_path = src_path.resolve()
     dst_path = dst_path.resolve()
+    if not plan.steps:
+        raise ConversionError("empty plan: nothing to execute")
     cleanup = False
     if workdir is None:
         workdir = Path(tempfile.mkdtemp(prefix="cirax-"))
@@ -264,15 +283,18 @@ def execute(plan: Plan, reg: Registry, src_path: Path, dst_path: Path,
                     shutil.which("ffprobe") and not quiet:
                 proc = _run_with_progress(argv, current)
                 if proc.returncode != 0:
-                    raise ConversionError(
-                        f"{step.engine.name} failed (exit {proc.returncode}):\n"
-                        f"{(proc.stderr or '').strip()[-2000:]}")
+                    raise ConversionError(_step_error(step, proc))
             else:
                 proc = _run(argv, cwd=cwd)
                 if proc.returncode != 0:
-                    raise ConversionError(
-                        f"{step.engine.name} failed (exit {proc.returncode}):\n"
-                        f"{(proc.stderr or proc.stdout or '').strip()[-2000:]}")
+                    raise ConversionError(_step_error(step, proc))
+
+            if step.route.output_from == "stdout":
+                out.parent.mkdir(parents=True, exist_ok=True)
+                text = proc.stdout or ""
+                if step.route.post == "strip_fences":
+                    text = _strip_fences(text)
+                out.write_text(text)
 
             if step.route.output_mode == "outdir" and not do_multipage:
                 produced = sorted(

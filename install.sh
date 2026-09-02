@@ -19,7 +19,7 @@
 set -eu
 
 SRC="${CIRAX_SRC:-}"
-REPO="${CIRAX_REPO:-https://github.com/cirax/cirax}"
+REPO="${CIRAX_REPO:-https://github.com/baselanaya/Cirax}"
 REF="${CIRAX_REF:-main}"
 VERSION="${CIRAX_VERSION:-}"
 
