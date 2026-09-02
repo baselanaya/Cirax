@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: install a subset of engines
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libvips-tools p7zip-full zstd ghostscript poppler-utils file
+      - name: install cirax
+        run: uv sync
+      - name: doctor
+        run: uv run cirax doctor
+      - name: conversion checks
+        run: |
+          set -e
+          T=$(mktemp -d); cd "$T"
+          CIRAX="$GITHUB_WORKSPACE/.venv/bin/cirax"
+          printf 'hello cirax\n' > doc.txt
+          $CIRAX convert -q doc.txt -t zst
+          file -b doc.zst | grep -qi zstd
+          7z a -bso0 archive.zip doc.txt
+          $CIRAX convert -q archive.zip -t 7z
+          file -b archive.7z | grep -qi 7-zip
+          python3 - <<'PY'
+          import base64, pathlib
+          # 1x1 transparent PNG
+          png = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4"
+            "nGNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==")
+          pathlib.Path("dot.png").write_bytes(png)
+          PY
+          $CIRAX convert -q dot.png -t webp
+          file -b dot.webp | grep -qi webp
+          printf '%%!PS\n/Helvetica findfont 20 scalefont setfont 72 700 moveto (Hello Cirax) show showpage\n' > doc.ps
+          $CIRAX convert -q doc.ps readme.pdf
+          $CIRAX convert -q readme.pdf -t txt
+          grep -qi cirax readme.txt
+          echo "ci conversions ok"

@@ -1,0 +1,59 @@
+name: publish
+
+# Publish on version tags (v0.3.0, ...) or manually via workflow_dispatch.
+#
+# One-time setup (Settings → Secrets and variables → Actions):
+#   PYPI_API_TOKEN — create at pypi.org → Account settings → API tokens
+#                    (project-scoped token once `cirax` exists there)
+#   NPM_TOKEN      — create at npmjs.com → Access Tokens → Granular token
+#                    with Read & publish permission
+#
+# Token-free alternative for PyPI: configure a "pending trusted publisher"
+# on pypi.org for project `cirax` (owner baselanaya, repo Cirax, workflow
+# publish.yml), then delete the `password:` line below — the action falls
+# back to OIDC trusted publishing.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      npm:
+        description: "also publish the npm wrapper"
+        type: boolean
+        default: false
+
+jobs:
+  pypi:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # for trusted publishing (unused when a token is set)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: build sdist + wheel
+        run: uv build
+      - name: publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+  npm:
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.npm == true
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: npm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+      - name: bundle python core
+        run: npm run build:python
+      - name: publish to npm
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
