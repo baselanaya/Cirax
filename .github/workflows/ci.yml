@@ -63,6 +63,19 @@ jobs:
         shell: pwsh
         run: |
           choco install -y --no-progress ffmpeg imagemagick ghostscript poppler 7zip pandoc
+      - name: put engine CLIs on PATH
+        shell: pwsh
+        run: |
+          # choco's Ghostscript.app / poppler packages don't add their CLIs to PATH
+          $gs = Get-ChildItem "C:\Program Files\gs" -Directory -ErrorAction SilentlyContinue |
+                Sort-Object Name -Descending | Select-Object -First 1
+          if ($gs) { "$($gs.FullName)\bin" | Out-File $env:GITHUB_PATH -Encoding utf8 -Append }
+          Get-ChildItem "C:\Program Files" -Directory -Filter "poppler*" -ErrorAction SilentlyContinue | ForEach-Object {
+            Get-ChildItem $_.FullName -Recurse -Filter "pdftotext.exe" -ErrorAction SilentlyContinue |
+              Select-Object -First 1 -ExpandProperty DirectoryName
+          } | Select-Object -Unique | ForEach-Object {
+            $_ | Out-File $env:GITHUB_PATH -Encoding utf8 -Append
+          }
       - name: install cirax
         run: uv sync
       - name: doctor
