@@ -43,7 +43,7 @@ jobs:
           pathlib.Path("dot.png").write_bytes(png)
           PY
           $CIRAX convert -q dot.png -t webp
-          file -b dot.webp | grep -qi webp
+          file -b dot.webp | grep -qiE "web.?p"
           echo "[4] ps -> pdf -> txt"
           printf '%%!PS\n/Helvetica findfont 20 scalefont setfont 72 700 moveto (Hello Cirax) show showpage\n' > doc.ps
           $CIRAX convert -q doc.ps readme.pdf
