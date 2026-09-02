@@ -1,6 +1,6 @@
 {
   "name": "cirax",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Universal local conversion hub — every format to every format, fully offline on Linux. npm wrapper that installs the Python core.",
   "license": "MIT",
   "repository": {

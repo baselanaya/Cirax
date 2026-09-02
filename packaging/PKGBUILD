@@ -1,0 +1,69 @@
+# Maintainer: baselanaya <baselanaya@users.noreply.github.com>
+# Contributor: Cirax contributors
+pkgname=cirax
+pkgver=0.3.0
+pkgrel=1
+pkgdesc="Universal local conversion hub — every format to every format, fully offline"
+arch=(any)
+url="https://github.com/baselanaya/Cirax"
+license=(MIT)
+depends=('python>=3.10' 'python-yaml' 'python-rich')
+makedepends=(python-build python-installer python-hatchling)
+optdepends=(
+  'ffmpeg: audio/video engine (recommended)'
+  'libvips: fast image engine (recommended)'
+  'imagemagick: wide image format net'
+  '7zip: archive engine (recommended)'
+  'ghostscript: PDF compression/raster'
+  'qpdf: lossless PDF surgery'
+  'poppler: PDF text/raster extract'
+  'libreoffice-still: office documents'
+  'pandoc: markup conversion'
+  'calibre: ebooks'
+  'inkscape: vector hub'
+  'librsvg: SVG rasterizer'
+  'darktable: camera RAW'
+  'libheif: HEIC decode'
+  'libjxl: JPEG XL'
+  'libavif: AVIF'
+  'libwebp: WebP'
+  'perl-image-exiftool: metadata ops'
+  'pngquant: PNG palette compression'
+  'oxipng: lossless PNG optimizer'
+  'gifsicle: GIF optimizer'
+  'mkvtoolnix-cli: Matroska surgery'
+  'sox: audio DSP'
+  'opus-tools: Opus encoding'
+  'zstd: single-file compression'
+  'jq: JSON'
+  'go-yq: JSON/YAML/XML/CSV converter'
+  'miller: record formats'
+  'duckdb: CSV/Parquet/JSON'
+  'tesseract-data-eng: OCR fallback data (also install tesseract)'
+  'ocrmypdf: searchable PDFs'
+  'img2pdf: lossless image->PDF'
+  'mupdf-tools: PDF clean'
+  'unar: archive extraction'
+  'libisoburn: ISO authoring'
+  'qemu-img: VM disk images'
+  'assimp: 3D models'
+  'python-fonttools: fonts'
+  'gdal: geospatial'
+  'dos2unix: line endings'
+  'ollama: local AI models (GLM-OCR, whisper)'
+)
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+options=(!strip)
+
+build() {
+  cd "$pkgname-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

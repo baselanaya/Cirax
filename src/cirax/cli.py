@@ -337,6 +337,15 @@ def cmd_watch(args) -> int:
     return 0
 
 
+def cmd_serve(args) -> int:
+    from . import webui
+    reg = load()
+    if args.host not in ("127.0.0.1", "localhost", "::1") and not args.quiet:
+        print("note: binding a non-loopback address exposes conversion "
+              "execution to your network")
+    return webui.serve(reg, args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="cirax",
@@ -392,6 +401,14 @@ def build_parser() -> argparse.ArgumentParser:
                    help="poll interval seconds (default 2)")
     w.add_argument("--sandbox", choices=["auto", "on", "off"], default="auto")
     w.set_defaults(func=cmd_watch)
+
+    s = sub.add_parser("serve", help="local web UI (upload → convert → download)")
+    s.add_argument("--host", default="127.0.0.1",
+                   help="bind address (default 127.0.0.1)")
+    s.add_argument("--port", type=int, default=8400, help="port (default 8400)")
+    s.add_argument("--sandbox", choices=["auto", "on", "off"], default="auto")
+    s.add_argument("-q", "--quiet", action="store_true")
+    s.set_defaults(func=cmd_serve)
     return p
 
 

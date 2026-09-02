@@ -143,6 +143,20 @@ else
   fail=$((fail+1)); echo "FAIL  geojson->gpkg"
 fi
 
+echo "== web UI =="
+"$CIRAX" serve --port 8477 --quiet > serve.log 2>&1 &
+SRV=$!
+sleep 2
+if curl -s http://127.0.0.1:8477/ | grep -q "Cirax" \
+   && curl -s -F "file=@sample.png" "http://127.0.0.1:8477/api/convert?to=webp" -o web-out.webp \
+   && file -b web-out.webp | grep -qi webp \
+   && curl -s -F "file=@sample.png" "http://127.0.0.1:8477/api/convert?to=nope" | grep -q error; then
+  pass=$((pass+1)); echo "  ok  serve (page, curl upload->convert, error JSON)"
+else
+  fail=$((fail+1)); echo "FAIL  serve"
+fi
+kill $SRV 2>/dev/null; wait $SRV 2>/dev/null
+
 echo
 echo "passed: $pass  failed: $fail"
 [ "$fail" -eq 0 ]

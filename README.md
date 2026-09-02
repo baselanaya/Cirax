@@ -12,22 +12,28 @@ and executes it. See [PLAN.md](PLAN.md) for the full architecture and roadmap.
 
 ## Install
 
-**curl one-liner** (once the repo is on GitHub; for a local checkout use `CIRAX_SRC`):
+**PyPI** (once published — `make publish-pypi`):
+
+```sh
+uv tool install cirax     # or: pipx install cirax
+```
+
+**curl one-liner** (bootstraps `uv`, installs as a `uv tool`):
 
 ```sh
 CIRAX_SRC=. sh install.sh                 # from this checkout
-CIRAX_REPO=https://github.com/you/cirax sh <(curl -fsSL .../install.sh)   # from git
+CIRAX_REPO=https://github.com/baselanaya/Cirax sh <(curl -fsSL \
+  https://raw.githubusercontent.com/baselanaya/Cirax/main/install.sh)
 ```
 
-The script bootstraps [`uv`](https://docs.astral.sh/uv/) if needed and installs
-cirax as a `uv tool` (lands in `~/.local/bin`).
+**Arch/AUR** — PKGBUILD in [`packaging/`](packaging/) (community AUR upload pending).
 
 **npm wrapper** — ships the Python source, bootstraps a private venv on first
 run (npm ≥ 12 gates lifecycle scripts, so the bin shim self-installs):
 
 ```sh
 cd npm && npm run build:python && npm pack   # when publishing
-npm install -g ./cirax-0.2.0.tgz && cirax doctor
+npm install -g ./cirax-0.3.0.tgz && cirax doctor
 ```
 
 **Development** (uv-managed):
@@ -35,7 +41,7 @@ npm install -g ./cirax-0.2.0.tgz && cirax doctor
 ```sh
 uv sync                # create .venv, install deps + cirax (editable)
 uv run cirax doctor    # or: . .venv/bin/activate
-make test              # smoke suite
+make test              # 31-check smoke suite
 ```
 
 ## Usage
@@ -68,12 +74,15 @@ cirax convert area.geojson area.gpkg               # GDAL
 # watch a folder: new files are converted as they appear
 cirax watch ~/scans -t pdf --out ~/documents
 
+# local web UI — upload in the browser, convert, download
+cirax serve                       # http://127.0.0.1:8400
+
 # sandboxing — default is auto: every job runs in bubblewrap with no
 # network, read-only filesystem, and writes confined to the job workspace
 # and output directory. `--sandbox on` to require it, `off` to disable.
 ```
 
-## Status — Phase 3 (depth & safety)
+## Status — Phase 4 (packaging & publishing)
 
 Working: engine probing, `doctor` capability matrix, multi-engine chain
 routing, presets, multi-page PDF raster, batch, ffmpeg progress, staged
@@ -90,7 +99,20 @@ ebooks (pandoc + Calibre), metadata stripping, line-ending/charset ops,
   to the target format automatically (state in `.cirax-watch.json`).
 - **3D / VM disks / geospatial** — assimp (obj↔glb↔stl↔ply...),
   qemu-img (qcow2↔vdi↔vmdk↔vhd), GDAL (geojson↔gpkg↔kml).
-- 30-check smoke suite, sandboxed by default.
+- 31-check smoke suite, sandboxed by default.
+
+- **`cirax serve`** — local web UI (Python stdlib only): drag-and-drop
+  upload, target-format picker, live engine matrix, download the result.
+  Loopback by default; uploads run through the same sandboxed pipeline.
+- **Packaging**: [`packaging/PKGBUILD`](packaging/) + `.SRCINFO` for
+  Arch/AUR; PyPI-ready sdist+wheel (`make publish-pypi`); npm tarball
+  (`make publish-npm`).
+- Flatpak intentionally skipped: Cirax treats engines as *system*
+  dependencies (40+ of them); bundling them per-sandbox would duplicate
+  the distro. Native packaging is the right fit.
+
+Remaining: AUR upload (needs an AUR account), `uv publish` to PyPI and
+`npm publish` (need account tokens), Blender/Piper adapters.
 
 ## Layout
 
