@@ -8,6 +8,7 @@ temp workspace with no shell involved (argv lists, never a shell string).
 from __future__ import annotations
 
 import dataclasses
+import os
 import re
 import shlex
 import shutil
@@ -160,10 +161,23 @@ def render_args(step: Step, *, src: Path, dst: Path, outdir: Path,
     return argv
 
 
+def _child_env() -> dict[str, str]:
+    """Environment for engine subprocesses.
+
+    Strips loader paths that frozen bundles (PyInstaller AppImages) export —
+    otherwise system engines inherit the bundle's libstdc++/glib/etc. and
+    crash with native SIGSEGVs.
+    """
+    env = dict(os.environ)
+    for key in ("LD_LIBRARY_PATH", "PYTHONPATH", "PYTHONHOME"):
+        env.pop(key, None)
+    return env
+
+
 def _run(argv: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess:
     try:
         proc = subprocess.run(argv, cwd=cwd, capture_output=True, text=True,
-                              timeout=1800)
+                              timeout=1800, env=_child_env())
     except FileNotFoundError:
         raise ConversionError(f"engine binary not found: {argv[0]}")
     except subprocess.TimeoutExpired:
@@ -200,7 +214,8 @@ def _run_with_progress(argv: list[str], src: Path) -> subprocess.CompletedProces
             total = None
     try:
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, text=True)
+                                stderr=subprocess.PIPE, text=True,
+                                env=_child_env())
     except FileNotFoundError:
         raise ConversionError(f"engine binary not found: {argv[0]}")
     last = 0.0

@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
 VER="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
-OUT="dist/packages"
+OUT="$ROOT/dist/packages"
 ARCH="$(uname -m)"
 
 echo "==> building cirax $VER for $ARCH"
@@ -18,7 +18,7 @@ uv pip install --quiet pyinstaller
 
 BUNDLES="$ROOT/dist/bundles"
 rm -rf "$BUNDLES" "$OUT"
-mkdir -p "$BUNDLES"
+mkdir -p "$BUNDLES" "$OUT"
 
 # 2. CLI binary (onefile)
 uv run pyinstaller --onefile --name cirax --clean --noconfirm \
@@ -37,6 +37,7 @@ mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" \
          "$APPDIR/usr/share/icons/hicolor/256x256/apps" "$APPDIR/usr/lib"
 cp -r "dist/cirax-app" "$APPDIR/usr/lib/"
 cp assets/cirax.png "$APPDIR/usr/share/icons/hicolor/256x256/apps/cirax.png"
+cp assets/cirax.png "$APPDIR/cirax.png"
 cp desktop/cirax.desktop "$APPDIR/usr/share/applications/cirax.desktop"
 cat > "$APPDIR/cirax.desktop" <<EOF
 [Desktop Entry]
@@ -84,14 +85,16 @@ Homepage: https://github.com/baselanaya/Cirax
 EOF
 ( cd "$DEBDIR" && tar czf control.tar.gz -C DEBIAN . && tar czf data.tar.gz usr \
   && echo "2.0" > debian-binary \
-  && ar rc "$ROOT/$OUT/cirax_${VER}_$([ "$ARCH" = "x86_64" ] && echo amd64 || echo "$ARCH").deb" \
+  && ar rc "$OUT/cirax_${VER}_$([ "$ARCH" = "x86_64" ] && echo amd64 || echo "$ARCH").deb" \
      debian-binary control.tar.gz data.tar.gz )
 
 # 6. .rpm (rpmbuild)
 RPMROOT="$BUNDLES/rpmbuild"
 mkdir -p "$RPMROOT"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+cp -r "dist/cirax-app" "$BUNDLES/cirax-app"
+cp assets/cirax.png "$BUNDLES/cirax.png"
 tar czf "$RPMROOT/SOURCES/cirax-$VER.tar.gz" -C "$BUNDLES" \
-  cirax cirax-app
+  cirax cirax-app cirax.png
 cat > "$RPMROOT/SPECS/cirax.spec" <<EOF
 Name:           cirax
 Version:        $VER
@@ -114,8 +117,8 @@ cp -r cirax-app %{buildroot}/opt/cirax/
 cp cirax %{buildroot}/opt/cirax/
 ln -sf /opt/cirax/cirax-app/cirax-app %{buildroot}%{_bindir}/cirax-app
 ln -sf /opt/cirax/cirax %{buildroot}%{_bindir}/cirax
-cp %{_topdir}/../deb/usr/share/applications/cirax.desktop %{buildroot}%{_datadir}/applications/
-cp %{_topdir}/../deb/usr/share/icons/hicolor/256x256/apps/cirax.png %{buildroot}%{_datadir}/icons/hicolor/256x256/apps/
+printf '[Desktop Entry]\nType=Application\nName=Cirax\nGenericName=File Converter\nComment=Every format to every format - fully local, sandboxed\nExec=cirax-app\nIcon=cirax\nTerminal=false\nCategories=Utility;Office;AudioVideo;Graphics;\n' > %{buildroot}%{_datadir}/applications/cirax.desktop
+cp cirax.png %{buildroot}%{_datadir}/icons/hicolor/256x256/apps/cirax.png
 %files
 /opt/cirax
 %{_bindir}/cirax
@@ -123,9 +126,10 @@ cp %{_topdir}/../deb/usr/share/icons/hicolor/256x256/apps/cirax.png %{buildroot}
 %{_datadir}/applications/cirax.desktop
 %{_datadir}/icons/hicolor/256x256/apps/cirax.png
 EOF
-rpmbuild -bb --define "_topdir $RPMROOT" \
+rpmbuild -bb --undefine dist --define "_topdir $RPMROOT" \
   "$RPMROOT/SPECS/cirax.spec" >/dev/null
-find "$RPMROOT/RPMS" -name '*.rpm' -exec cp {} "$OUT/" \;
+find "$RPMROOT/RPMS" -name '*.rpm' ! -name '*debuginfo*' \
+  -exec cp {} "$OUT/" \;
 
 echo "==> artifacts:"
 ls -la "$OUT"
