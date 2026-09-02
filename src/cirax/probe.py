@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import subprocess
 import sys
 
 from .registry import Engine, Registry
