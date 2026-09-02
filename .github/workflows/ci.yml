@@ -50,3 +50,50 @@ jobs:
           $CIRAX convert -q readme.pdf -t txt
           grep -qi cirax readme.txt
           echo "ci conversions ok"
+
+  test-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: install a subset of engines
+        shell: pwsh
+        run: |
+          choco install -y --no-progress ffmpeg imagemagick ghostscript poppler 7zip zstd pandoc
+      - name: install cirax
+        run: uv sync
+      - name: doctor
+        run: uv run cirax doctor
+      - name: conversion checks
+        run: |
+          set -e
+          T=$(mktemp -d); cd "$T"
+          CIRAX="$GITHUB_WORKSPACE/.venv/Scripts/cirax"
+          printf 'hello cirax\n' > doc.txt
+          echo "[1] txt -> zst"
+          "$CIRAX" convert -q doc.txt -t zst
+          test -s doc.zst
+          echo "[2] zip -> 7z"
+          7z a -bso0 archive.zip doc.txt
+          "$CIRAX" convert -q archive.zip -t 7z
+          test -s archive.7z
+          echo "[3] png -> webp"
+          python - <<'PY'
+          import base64, pathlib
+          png = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4"
+            "nGNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==")
+          pathlib.Path("dot.png").write_bytes(png)
+          PY
+          "$CIRAX" convert -q dot.png -t webp
+          test -s dot.webp
+          echo "[4] ps -> pdf -> txt"
+          printf '%%!PS\n/Helvetica findfont 20 scalefont setfont 72 700 moveto (Hello Cirax) show showpage\n' > doc.ps
+          "$CIRAX" convert -q doc.ps readme.pdf
+          test -s readme.pdf
+          "$CIRAX" convert -q readme.pdf -t txt
+          grep -qi cirax readme.txt
+          echo "windows conversions ok"

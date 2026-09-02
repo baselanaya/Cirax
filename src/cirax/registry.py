@@ -77,6 +77,8 @@ class Engine:
     routes: list[Route] = field(default_factory=list)
     presets: dict[str, dict[str, object]] = field(default_factory=dict)
     sandbox: str = "default"  # "default" | "none" (needs local daemon/net)
+    install_windows: str | None = None  # scoop/winget/pip hint for Windows
+    binaries_windows: str | None = None  # Windows binary name (e.g. gswin64c)
     # filled in by the prober:
     installed: bool = False
     path: str | None = None
@@ -152,6 +154,8 @@ def _build_engine(d: dict) -> Engine:
         routes=[_build_route(r) for r in d.get("routes", [])],
         presets=dict(d.get("presets", {})),
         sandbox=d.get("sandbox", "default"),
+        install_windows=d.get("install_windows"),
+        binaries_windows=d.get("binaries_windows"),
     )
 
 

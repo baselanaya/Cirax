@@ -32,12 +32,13 @@ from PySide6.QtWidgets import (
 from cirax import __version__
 from cirax.detect import detect
 from cirax.executor import ConversionError, execute
+from cirax.paths import state_dir
 from cirax.probe import probe_all
 from cirax.registry import load
 from cirax.router import find_plan, reachable
 from cirax import webui
 
-STATE_DIR = Path.home() / ".local" / "state" / "cirax"
+STATE_DIR = state_dir()
 
 STYLE = """
 QWidget { background: transparent; color: #dbe4ec; font-size: 13px; }

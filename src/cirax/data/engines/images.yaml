@@ -32,6 +32,7 @@ engines:
   - engine: imagemagick
     binary: magick
     package: imagemagick
+    install_windows: "scoop install imagemagick"
     description: Widest image format net (300+), PDF rasters included
     categories: [image]
     probe:
@@ -143,6 +144,7 @@ engines:
   - engine: oxipng
     binary: oxipng
     package: oxipng
+    install_windows: "scoop install oxipng"
     description: Lossless PNG optimizer
     categories: [image]
     probe: {args: [--version], version_regex: 'oxipng ([^\s]+)'}
@@ -156,6 +158,7 @@ engines:
   - engine: pngquant
     binary: pngquant
     package: pngquant
+    install_windows: "scoop install pngquant"
     description: Palette-quantizing PNG compressor (lossy, dramatic savings)
     categories: [image]
     probe: {args: [--version], version_regex: '([^\s]+)'}
@@ -169,6 +172,7 @@ engines:
   - engine: darktable-cli
     binary: darktable-cli
     package: darktable
+    install_windows: "scoop install darktable"
     description: Camera RAW developer — highest-quality RAW conversion
     categories: [image]
     probe: {args: [--version], version_regex: 'darktable ([^\s]+)'}
@@ -198,6 +202,7 @@ engines:
   - engine: inkscape
     binary: inkscape
     package: inkscape
+    install_windows: "scoop install inkscape"
     description: Vector hub — SVG to/from PDF, PNG, PS, EPS, EMF, WMF
     categories: [image, document]
     probe: {args: [--version], version_regex: 'Inkscape ([^\s]+)'}
@@ -228,6 +233,7 @@ engines:
   - engine: potrace
     binary: potrace
     package: potrace
+    install_windows: "scoop install potrace"
     description: Bitmap-to-vector tracer (monochrome)
     categories: [image]
     probe: {args: [--version], version_regex: 'Potrace version ([^\s]+)'}
@@ -255,6 +261,7 @@ engines:
   - engine: exiftool
     binary: exiftool
     package: perl-image-exiftool
+    install_windows: "scoop install exiftool"
     description: Read/write/strip metadata across hundreds of formats
     categories: [metadata]
     probe: {args: [-ver], version_regex: '([^\s]+)'}

@@ -1,7 +1,7 @@
 {
   "name": "@baselanaya/cirax",
-  "version": "0.4.3",
-  "description": "Universal local conversion hub — every format to every format, fully offline on Linux. npm wrapper that installs the Python core.",
+  "version": "0.5.0",
+  "description": "Universal local conversion hub — every format to every format, fully offline. npm wrapper that installs the Python core.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -35,7 +35,8 @@
     "node": ">=16",
     "os": [
       "linux",
-      "darwin"
+      "darwin",
+      "win32"
     ]
   }
 }

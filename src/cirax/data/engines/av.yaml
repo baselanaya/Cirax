@@ -4,6 +4,7 @@ engines:
   - engine: ffmpeg
     binary: ffmpeg
     package: ffmpeg
+    install_windows: "scoop install ffmpeg"
     description: Universal audio/video transcoder — the spine of the A/V domain
     categories: [video, audio, subtitle]
     probe:
@@ -104,6 +105,7 @@ engines:
   - engine: mkvmerge
     binary: mkvmerge
     package: mkvtoolnix-cli
+    install_windows: "scoop install mkvtoolnix"
     description: Lossless Matroska container surgery (merge/split/extract)
     categories: [video, subtitle]
     note: container operations, not format conversion — adapter pending (Phase 1)
@@ -114,6 +116,7 @@ engines:
   - engine: sox
     binary: sox
     package: sox
+    install_windows: "scoop install sox"
     description: Audio DSP — resample, dither, channels, effects
     categories: [audio]
     probe:
@@ -130,6 +133,7 @@ engines:
   - engine: lame
     binary: lame
     package: lame
+    install_windows: "scoop install lame"
     description: Reference MP3 encoder
     categories: [audio]
     probe:
@@ -145,6 +149,7 @@ engines:
   - engine: flac
     binary: flac
     package: flac
+    install_windows: "scoop install flac"
     description: Reference FLAC encoder/decoder
     categories: [audio]
     probe:
@@ -165,6 +170,7 @@ engines:
   - engine: opusenc
     binary: opusenc
     package: opus-tools
+    install_windows: "scoop install opus-tools"
     description: Reference Opus encoder
     categories: [audio]
     probe:
@@ -180,6 +186,7 @@ engines:
   - engine: gifsicle
     binary: gifsicle
     package: gifsicle
+    install_windows: "scoop install gifsicle"
     description: GIF optimizer and frame surgery
     categories: [image, video]
     probe:

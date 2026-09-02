@@ -4,6 +4,7 @@ engines:
   - engine: qemu-img
     binary: qemu-img
     package: qemu-img
+    install_windows: "scoop install qemu"
     description: VM disk image converter (qcow2/vdi/vmdk/vhd/vhdx/raw)
     categories: [disk]
     probe: {args: [--version], version_regex: 'qemu-img version ([^\s]+)'}
@@ -51,6 +52,7 @@ engines:
   - engine: fonttools
     binary: fonttools
     package: python-fonttools
+    install_windows: "pip install fonttools"
     description: Font converter — TTF/OTF/WOFF/WOFF2
     categories: [font]
     note: version probing via --version prints a traceback; detection only

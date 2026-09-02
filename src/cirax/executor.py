@@ -21,6 +21,7 @@ from pathlib import Path
 from .registry import Registry, TREE_FMT
 from .router import Plan, Step
 from .sandbox import bwrap_argv, resolve_mode
+from .probe import engine_binary
 
 FLAG_VARS = {"flags", "input_flags", "output_flags"}
 _PLACEHOLDER = re.compile(r"\{(\w+)\}")
@@ -300,6 +301,8 @@ def execute(plan: Plan, reg: Registry, src_path: Path, dst_path: Path,
             argv = render_args(step, src=current, dst=out, outdir=outdir,
                                ext_for=reg.ext_for, pages=page_range,
                                multipage=do_multipage, workdir=workdir)
+            # per-platform binary name (e.g. Ghostscript: gs / gswin64c)
+            argv[0] = engine_binary(step.engine)
             try:
                 sb_mode = resolve_mode(sandbox, step.engine.sandbox)
             except RuntimeError as exc:

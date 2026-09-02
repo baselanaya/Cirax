@@ -6,6 +6,7 @@ engines:
   - engine: sevenzip
     binary: 7z
     package: 7zip
+    install_windows: "scoop install 7zip"
     description: Archive hub — extract nearly everything, create zip/7z/tar
     categories: [archive]
     probe: {args: ["i"], version_regex: '7-Zip ([^\s]+)'}
@@ -43,6 +44,7 @@ engines:
   - engine: zstd
     binary: zstd
     package: zstd
+    install_windows: "scoop install zstd"
     description: Zstandard single-file compression (any input)
     categories: [compression]
     probe: {args: [--version], version_regex: 'v(\d[\d.]+)'}
@@ -57,6 +59,7 @@ engines:
   - engine: unar
     binary: unar
     package: unar
+    install_windows: "scoop install unar"
     description: Best-in-class extractor (handles exotic filename encodings)
     categories: [archive]
     probe: {args: [--version], version_regex: '([^\s]+)'}

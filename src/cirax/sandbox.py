@@ -16,8 +16,8 @@ local-only infrastructure.
 
 from __future__ import annotations
 
-import os
 import shutil
+import sys
 from pathlib import Path
 
 # sandbox values for engine specs: "default" (sandboxed) | "none" (opt out)
@@ -27,9 +27,20 @@ def bwrap_available() -> bool:
     return shutil.which("bwrap") is not None
 
 
+def platform_supported() -> bool:
+    """Sandboxing needs bubblewrap — a Linux technology."""
+    return sys.platform.startswith("linux")
+
+
 def resolve_mode(mode: str, engine_sandbox: str | None) -> str:
     """Resolve CLI --sandbox (auto|on|off) against the engine's preference."""
     if mode == "off":
+        return "off"
+    if not platform_supported():
+        if mode == "on":
+            raise RuntimeError(
+                "sandboxing requires bubblewrap, which is Linux-only; "
+                "use --sandbox off (Windows runs engines unsandboxed)")
         return "off"
     if engine_sandbox == "none":
         if mode == "on":

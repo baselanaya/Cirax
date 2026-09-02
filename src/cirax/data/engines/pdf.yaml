@@ -5,6 +5,7 @@ engines:
   - engine: qpdf
     binary: qpdf
     package: qpdf
+    install_windows: "scoop install qpdf"
     description: Lossless PDF surgery — merge, split, linearize, repair
     categories: [document]
     probe: {args: [--version], version_regex: 'qpdf version ([^\s]+)'}
@@ -19,6 +20,8 @@ engines:
   - engine: ghostscript
     binary: gs
     package: ghostscript
+    install_windows: "scoop install ghostscript"
+    binaries_windows: gswin64c
     description: PDF/PostScript compression and rasterization
     categories: [document]
     probe: {args: [--version], version_regex: '^(\d[\d.]+)'}
@@ -59,6 +62,7 @@ engines:
   - engine: pdftotext
     binary: pdftotext
     package: poppler
+    install_windows: "scoop install poppler"
     description: PDF text extraction (Poppler)
     categories: [document]
     probe: {args: [-v], version_regex: 'pdftotext version ([^\s]+)'}
@@ -72,6 +76,7 @@ engines:
   - engine: pdftoppm
     binary: pdftoppm
     package: poppler
+    install_windows: "scoop install poppler"
     description: PDF rasterizer (Poppler)
     categories: [document, image]
     probe: {args: [-v], version_regex: 'pdftoppm version ([^\s]+)'}
@@ -92,6 +97,7 @@ engines:
   - engine: pdftocairo
     binary: pdftocairo
     package: poppler
+    install_windows: "scoop install poppler"
     description: PDF to PNG/JPEG/SVG via cairo (Poppler)
     categories: [document, image]
     probe: {args: [-v], version_regex: 'pdftocairo version ([^\s]+)'}
@@ -120,6 +126,7 @@ engines:
   - engine: img2pdf
     binary: img2pdf
     package: img2pdf
+    install_windows: "pip install img2pdf"
     description: Lossless image-to-PDF (embeds, never recompresses)
     categories: [image, document]
     probe: {args: [--version], version_regex: '([^\s]+)'}
@@ -133,6 +140,7 @@ engines:
   - engine: ocrmypdf
     binary: ocrmypdf
     package: ocrmypdf
+    install_windows: "pip install ocrmypdf"
     description: Add an OCR text layer to scanned PDFs
     categories: [document]
     probe: {args: [--version], version_regex: '([^\s]+)'}
@@ -147,6 +155,7 @@ engines:
   - engine: tesseract
     binary: tesseract
     package: tesseract tesseract-data-eng
+    install_windows: "scoop install tesseract"
     description: OCR — images to text or searchable PDF
     categories: [image, document]
     probe: {args: [--version], version_regex: 'tesseract ([^\s]+)'}

@@ -4,6 +4,7 @@ engines:
   - engine: libreoffice
     binary: soffice
     package: libreoffice-still
+    install_windows: "scoop bucket add extras && scoop install libreoffice"
     description: Office hub — word processor, sheets, slides to PDF/HTML/text
     categories: [document, spreadsheet, presentation]
     probe:
@@ -43,6 +44,7 @@ engines:
   - engine: pandoc
     binary: pandoc
     package: pandoc
+    install_windows: "scoop install pandoc"
     description: Universal markup converter
     categories: [document]
     probe: {args: [--version], version_regex: 'pandoc ([^\s]+)'}
@@ -62,6 +64,7 @@ engines:
   - engine: calibre
     binary: ebook-convert
     package: calibre
+    install_windows: "scoop install calibre"
     description: The ebook king — every reader format to every writer format
     categories: [ebook, document]
     probe: {args: [--version], version_regex: 'ebook-convert.*?([^\s]+)\)?'}
@@ -82,6 +85,7 @@ engines:
   - engine: weasyprint
     binary: weasyprint
     package: python-weasyprint
+    install_windows: "pip install weasyprint"
     description: Print-grade HTML to PDF (CSS paged media)
     categories: [document]
     probe: {args: [--version], version_regex: '([^\s]+)'}
@@ -95,6 +99,7 @@ engines:
   - engine: typst
     binary: typst
     package: typst
+    install_windows: "scoop install typst"
     description: Modern typesetting — Typst to PDF/PNG
     categories: [document]
     probe: {args: [--version], version_regex: 'typst ([^\s]+)'}

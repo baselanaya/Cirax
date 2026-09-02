@@ -64,15 +64,24 @@ def cmd_doctor(args) -> int:
     hw = ffmpeg_hw_accel(reg)
     print(f"\nEngines: {len(installed)}/{len(reg.engines)} installed · "
           f"formats: {len(reg.formats)}")
-    print(f"Hardware video encoders: {', '.join(hw) if hw else 'none detected'}")
-    from .sandbox import bwrap_available
-    print(f"Sandbox: {'bwrap ready' if bwrap_available() else 'bwrap missing'}")
+    if hw:
+        print(f"Hardware video encoders: {', '.join(hw)}")
+    from .sandbox import bwrap_available, platform_supported
+    if platform_supported():
+        print(f"Sandbox: {'bwrap ready' if bwrap_available() else 'bwrap missing'}")
+    else:
+        print("Sandbox: unavailable on this platform (Linux-only)")
 
-    missing = [e for e in reg.engines if not e.installed and e.package]
+    is_windows = sys.platform == "win32"
+    missing = [e for e in reg.engines if not e.installed and
+               (e.install_windows if is_windows else e.package)]
     if missing and args.show_missing:
-        print("\nMissing engines (Arch package hints):")
+        print("\nMissing engines"
+              + (" (install hints):" if is_windows else
+                 " (Arch package hints):"))
         for e in missing:
-            print(f"  sudo pacman -S --needed {e.package}   # {e.name} ({e.binary})")
+            hint = e.install_windows if is_windows else e.package
+            print(f"  {hint}   # {e.name} ({e.binary})")
 
     unsetup = [e for e in reg.engines
                if e.installed and e.setup_hint and not e.version]

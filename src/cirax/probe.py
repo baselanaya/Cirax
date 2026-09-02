@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import re
 import shutil
-import subprocess
+import sys
 
 from .registry import Engine, Registry
 
@@ -17,9 +17,21 @@ FFMPEG_HW_ENCODERS = [
 ]
 
 
+def engine_binary(engine: Engine) -> str:
+    """The binary name to search for on this platform.
+
+    Windows: engines sometimes ship under a different name (Ghostscript's
+    CLI is gswin64c, not gs) — the spec overrides via binaries_windows.
+    """
+    if sys.platform == "win32" and engine.binaries_windows:
+        return engine.binaries_windows
+    return engine.binary
+
+
 def probe_engine(engine: Engine, timeout: int = 15) -> None:
     """Fill in installed/path/version for one engine (in place)."""
-    path = shutil.which(engine.binary)
+    binary = engine_binary(engine)
+    path = shutil.which(binary)
     if not path:
         return
     engine.installed = True
