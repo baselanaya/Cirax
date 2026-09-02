@@ -92,9 +92,10 @@ jobs:
           "$CIRAX" convert -q archive.zip -t 7z
           test -s archive.7z
           echo "[3] webp -> png (imagemagick)"
-          magick dot.png dot.webp
-          "$CIRAX" convert -q dot.webp -t png
-          test -s dot.png.png
+          magick dot.png src.webp
+          "$CIRAX" convert -q src.webp out.png
+          test -s out.png
+          python -c "import pathlib; b = pathlib.Path('out.png').read_bytes(); assert b[:8] == b'\x89PNG\r\n\x1a\n', 'not a png'"
           echo "[4] ps -> pdf -> txt"
           printf '%%!PS\n/Helvetica findfont 20 scalefont setfont 72 700 moveto (Hello Cirax) show showpage\n' > doc.ps
           "$CIRAX" convert -q doc.ps readme.pdf
