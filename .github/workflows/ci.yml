@@ -75,10 +75,14 @@ jobs:
           printf 'hello cirax\n' > doc.txt
           echo "[1] png -> pdf (imagemagick)"
           python - <<'PY'
-          import base64, pathlib
-          png = base64.b64decode(
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4"
-            "nGNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==")
+          import struct, zlib, pathlib
+          def chunk(t, data):
+              c = t + data
+              return struct.pack(">I", len(data)) + c + struct.pack(">I", zlib.crc32(c) & 0xffffffff)
+          png = (b"\x89PNG\r\n\x1a\n"
+                 + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+                 + chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\xff\xff"))
+                 + chunk(b"IEND", b""))
           pathlib.Path("dot.png").write_bytes(png)
           PY
           "$CIRAX" convert -q dot.png -t pdf
