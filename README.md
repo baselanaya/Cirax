@@ -12,7 +12,7 @@ and executes it. See [PLAN.md](PLAN.md) for the full architecture and roadmap.
 
 ## Install
 
-**PyPI** (once published — `make publish-pypi`):
+**PyPI** — live:
 
 ```sh
 uv tool install cirax     # or: pipx install cirax
@@ -28,12 +28,12 @@ CIRAX_REPO=https://github.com/baselanaya/Cirax sh <(curl -fsSL \
 
 **Arch/AUR** — PKGBUILD in [`packaging/`](packaging/) (community AUR upload pending).
 
-**npm wrapper** — ships the Python source, bootstraps a private venv on first
-run (npm ≥ 12 gates lifecycle scripts, so the bin shim self-installs):
+**npm** — the `cirax` command installs globally (the package is scoped
+because npm's typosquatting rules block the bare name; the Python core
+self-installs on first run):
 
 ```sh
-cd npm && npm run build:python && npm pack   # when publishing
-npm install -g ./cirax-0.3.0.tgz && cirax doctor
+npm i -g @baselanaya/cirax && cirax doctor
 ```
 
 **Development** (uv-managed):
