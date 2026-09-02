@@ -1,0 +1,92 @@
+# Archive & compression engines. The "tree" pseudo-format models extraction:
+#   rar --(7z extract)--> tree --(7z create)--> 7z
+# which is how the router reaches every archive-to-archive pair.
+
+engines:
+  - engine: sevenzip
+    binary: 7z
+    package: 7zip
+    description: Archive hub — extract nearly everything, create zip/7z/tar
+    categories: [archive]
+    probe: {args: ["i"], version_regex: '7-Zip ([^\s]+)'}
+    routes:
+      - from: [application/zip, application/x-7z-compressed, application/x-tar,
+               application/vnd.rar, application/x-iso9660-image,
+               application/zstd, application/gzip, application/x-xz]
+        to: [application/x-tree]
+        lossless: true
+        priority: 90
+        note: extract into a staging directory
+        command: "7z x -y -bso0 -bsp0 -o{output} {input}"
+
+      - from: [application/x-tree]
+        to: [application/zip]
+        lossless: true
+        priority: 90
+        cwd: input
+        command: "7z a -tzip -bso0 {output} ."
+
+      - from: [application/x-tree]
+        to: [application/x-7z-compressed]
+        lossless: true
+        priority: 90
+        cwd: input
+        command: "7z a -t7z -bso0 {output} ."
+
+      - from: [application/x-tree]
+        to: [application/x-tar]
+        lossless: true
+        priority: 85
+        cwd: input
+        command: "7z a -ttar -bso0 {output} ."
+
+  - engine: zstd
+    binary: zstd
+    package: zstd
+    description: Zstandard single-file compression (any input)
+    categories: [compression]
+    probe: {args: [--version], version_regex: 'v(\d[\d.]+)'}
+    routes:
+      - from: ["*"]
+        to: [application/zstd]
+        lossless: true
+        priority: 20
+        note: compresses any single file
+        command: "zstd -q -3 -f {input} -o {output}"
+
+  - engine: unar
+    binary: unar
+    package: unar
+    description: Best-in-class extractor (handles exotic filename encodings)
+    categories: [archive]
+    probe: {args: [--version], version_regex: '([^\s]+)'}
+    routes:
+      - from: [application/zip, application/vnd.rar, application/x-7z-compressed,
+               application/x-tar, application/x-iso9660-image]
+        to: [application/x-tree]
+        lossless: true
+        priority: 80
+        note: alternative extractor to 7z
+        output_mode: outdir
+        command: "unar -q -f -o {outdir} {input}"
+
+  - engine: xorriso
+    binary: xorriso
+    package: libisoburn
+    description: ISO 9660 / UDF authoring and extraction
+    categories: [archive]
+    probe: {args: [--version], version_regex: 'xorriso ([^\s]+)'}
+    routes:
+      - from: [application/x-tree]
+        to: [application/x-iso9660-image]
+        lossless: true
+        priority: 90
+        cwd: input
+        command: "xorriso -as mkisofs -quiet -o {output} -J -r ."
+
+      - from: [application/x-iso9660-image]
+        to: [application/x-tree]
+        lossless: true
+        priority: 70
+        output_mode: outdir
+        command: "xorriso -osirrox on -indev {input} -extract / {outdir}"

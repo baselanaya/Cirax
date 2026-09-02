@@ -1,0 +1,194 @@
+# Audio & video engines.
+
+engines:
+  - engine: ffmpeg
+    binary: ffmpeg
+    package: ffmpeg
+    description: Universal audio/video transcoder — the spine of the A/V domain
+    categories: [video, audio, subtitle]
+    probe:
+      args: [-hide_banner, -version]
+      version_regex: 'ffmpeg version ([^\s]+)'
+    presets:
+      web1080:
+        flags:
+          video/*: "-c:v libx264 -crf 26 -preset fast -vf scale=-2:1080 -c:a aac -b:a 128k -movflags +faststart"
+          audio/*: "-c:a aac -b:a 128k"
+      web720:
+        flags:
+          video/*: "-c:v libx264 -crf 27 -preset fast -vf scale=-2:720 -c:a aac -b:a 96k"
+          audio/*: "-c:a aac -b:a 96k"
+      hq:
+        flags:
+          video/*: "-c:v libx264 -crf 17 -preset slow -c:a aac -b:a 256k"
+          audio/*: "-c:a flac"
+      av1:
+        flags:
+          video/*: "-c:v libsvtav1 -crf 32 -preset 6 -c:a libopus -b:a 128k"
+          audio/*: "-c:a libopus -b:a 128k"
+    routes:
+      - from: [video/*, audio/*]
+        to: [video/mp4, video/x-matroska, video/webm, video/x-msvideo,
+             video/quicktime, video/x-flv, video/mpeg, video/mp2t, video/ogg,
+             video/x-m4v,
+             audio/mpeg, audio/aac, audio/mp4, audio/opus, audio/ogg,
+             audio/flac, audio/x-wav, audio/aiff, audio/x-ms-wma, audio/amr]
+        lossless: false
+        priority: 100
+        progress: ffmpeg
+        command: "ffmpeg -y -hide_banner -loglevel error -i {input} {flags} {output}"
+        vars:
+          flags:
+            video/mp4: "-c:v libx264 -crf 20 -preset medium -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart"
+            video/x-matroska: "-c:v libx264 -crf 20 -preset medium -c:a aac -b:a 192k"
+            video/webm: "-c:v libvpx-vp9 -crf 32 -b:v 0 -row-mt 1 -c:a libopus -b:a 128k"
+            video/x-msvideo: "-c:v mpeg4 -q:v 4 -c:a libmp3lame -q:a 3"
+            video/quicktime: "-c:v libx264 -crf 20 -c:a aac -b:a 192k"
+            video/x-flv: "-c:v libx264 -crf 23 -c:a aac -ar 44100"
+            video/mpeg: "-c:v mpeg2video -q:v 3 -c:a mp2 -b:a 192k"
+            video/mp2t: "-c:v libx264 -crf 23 -c:a aac -f mpegts"
+            video/ogg: "-c:v libtheora -q:v 6 -c:a libvorbis -q:a 4"
+            video/x-m4v: "-c:v libx264 -crf 20 -c:a aac -f mp4"
+            audio/mpeg: "-vn -c:a libmp3lame -q:a 2"
+            audio/aac: "-vn -c:a aac -b:a 192k"
+            audio/mp4: "-vn -c:a aac -b:a 192k"
+            audio/opus: "-vn -c:a libopus -b:a 128k"
+            audio/ogg: "-vn -c:a libvorbis -q:a 4"
+            audio/flac: "-vn -c:a flac"
+            audio/x-wav: "-vn -c:a pcm_s16le"
+            audio/aiff: "-vn -c:a pcm_s16be"
+            audio/x-ms-wma: "-vn -c:a wmav2 -b:a 192k"
+            audio/amr: "-vn -c:a libopencore_amrnb -ac 1 -ar 8000 -b:a 12.2k"
+      - from: [video/*]
+        to: [image/gif]
+        lossless: false
+        priority: 60
+        command: "ffmpeg -y -hide_banner -loglevel error -i {input} -vf fps=12,scale=640:-1:flags=lanczos -loop 0 {output}"
+      - from: [video/*]
+        to: [image/jpeg, image/png]
+        lossless: false
+        priority: 40
+        note: first-frame thumbnail
+        command: "ffmpeg -y -hide_banner -loglevel error -ss 1 -i {input} -frames:v 1 {flags} {output}"
+        vars:
+          flags:
+            image/jpeg: "-q:v 2"
+      - from: [video/*]
+        to: [application/x-subrip, text/vtt]
+        priority: 35
+        lossless: true
+        note: extracts an embedded subtitle track (AI transcription via whisper engine, Phase 3)
+        command: "ffmpeg -y -hide_banner -loglevel error -i {input} -map 0:s:0 {output}"
+
+  - engine: handbrake
+    binary: HandBrakeCLI
+    package: handbrake-cli
+    description: Preset-driven video transcoder (alternative route to ffmpeg)
+    categories: [video]
+    probe:
+      args: [--version]
+      version_regex: 'HandBrake ([^\s]+)'
+    routes:
+      - from: [video/*]
+        to: [video/mp4, video/x-matroska, video/webm]
+        lossless: false
+        priority: 55
+        note: alternative to ffmpeg; useful for its curated presets
+        command: "HandBrakeCLI -i {input} -o {output} -Z Fast 1080p30 --format {fmt}"
+        vars:
+          fmt:
+            video/mp4: av_mp4
+            video/x-matroska: av_mkv
+            video/webm: av_webm
+
+  - engine: mkvmerge
+    binary: mkvmerge
+    package: mkvtoolnix-cli
+    description: Lossless Matroska container surgery (merge/split/extract)
+    categories: [video, subtitle]
+    note: container operations, not format conversion — adapter pending (Phase 1)
+    probe:
+      args: [--version]
+      version_regex: 'mkvmerge v([^\s]+)'
+
+  - engine: sox
+    binary: sox
+    package: sox
+    description: Audio DSP — resample, dither, channels, effects
+    categories: [audio]
+    probe:
+      args: [--version]
+      version_regex: 'SoX v([^\s]+)'
+    routes:
+      - from: [audio/x-wav, audio/flac, audio/ogg, audio/aiff, audio/mp4, audio/mpeg]
+        to: [audio/x-wav, audio/flac, audio/ogg, audio/aiff, audio/mpeg]
+        lossless: false
+        priority: 30
+        note: specialist audio route; ffmpeg usually wins the ranking
+        command: "sox {input} {output}"
+
+  - engine: lame
+    binary: lame
+    package: lame
+    description: Reference MP3 encoder
+    categories: [audio]
+    probe:
+      args: [--version]
+      version_regex: 'version ([^\s]+)'
+    routes:
+      - from: [audio/x-wav]
+        to: [audio/mpeg]
+        lossless: false
+        priority: 45
+        command: "lame -V2 {input} {output}"
+
+  - engine: flac
+    binary: flac
+    package: flac
+    description: Reference FLAC encoder/decoder
+    categories: [audio]
+    probe:
+      args: [-v]
+      version_regex: 'flac ([^\s]+)'
+    routes:
+      - from: [audio/x-wav, audio/aiff]
+        to: [audio/flac]
+        lossless: true
+        priority: 45
+        command: "flac -s -f -o {output} {input}"
+      - from: [audio/flac]
+        to: [audio/x-wav, audio/aiff]
+        lossless: true
+        priority: 45
+        command: "flac -s -d -f -o {output} {input}"
+
+  - engine: opusenc
+    binary: opusenc
+    package: opus-tools
+    description: Reference Opus encoder
+    categories: [audio]
+    probe:
+      args: [--version]
+      version_regex: 'opusenc ([^\s]+)'
+    routes:
+      - from: [audio/x-wav, audio/flac]
+        to: [audio/opus]
+        lossless: false
+        priority: 45
+        command: "opusenc --bitrate 128 {input} {output}"
+
+  - engine: gifsicle
+    binary: gifsicle
+    package: gifsicle
+    description: GIF optimizer and frame surgery
+    categories: [image, video]
+    probe:
+      args: [--version]
+      version_regex: 'Gifsicle ([^\s]+)'
+    routes:
+      - from: [image/gif]
+        to: [image/gif]
+        lossless: true
+        priority: 50
+        note: lossless structural optimization of an existing GIF
+        command: "gifsicle -O3 -o {output} {input}"

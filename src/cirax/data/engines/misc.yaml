@@ -1,0 +1,115 @@
+# Misc domains: VM disks, 3D, GIS, fonts, and local-AI stubs.
+
+engines:
+  - engine: qemu-img
+    binary: qemu-img
+    package: qemu-img
+    description: VM disk image converter (qcow2/vdi/vmdk/vhd/vhdx/raw)
+    categories: [disk]
+    probe: {args: [--version], version_regex: 'qemu-img version ([^\s]+)'}
+    routes:
+      - from: [application/x-qemu-disk, application/x-vmdk, application/x-vdi,
+               application/x-vhd, application/x-vhdx, application/x-raw-disk]
+        to: [application/x-qemu-disk, application/x-vmdk, application/x-vdi,
+             application/x-vhd, application/x-vhdx, application/x-raw-disk]
+        lossless: true
+        priority: 95
+        command: "qemu-img convert -O {outfmt} {input} {output}"
+        vars:
+          outfmt:
+            application/x-qemu-disk: qcow2
+            application/x-vmdk: vmdk
+            application/x-vdi: vdi
+            application/x-vhd: vpc
+            application/x-vhdx: vhdx
+            application/x-raw-disk: raw
+
+  - engine: assimp
+    binary: assimp
+    package: assimp
+    description: 3D model format net (50+ mesh formats)
+    categories: [model3d]
+    probe: {args: [version], version_regex: 'Open Asset Import Library.*?\s([^\s]+)'}
+    routes:
+      - from: [model/obj, model/ply, model/stl, model/vnd.collada+xml,
+               model/3ds, model/x3d, model/gltf+json, model/gltf-binary,
+               model/fbx]
+        to: [model/obj, model/ply, model/stl, model/vnd.collada+xml,
+             model/x3d, model/gltf+json, model/gltf-binary, model/fbx]
+        lossless: false
+        priority: 70
+        command: "assimp export {input} {output}"
+
+  - engine: blender
+    binary: blender
+    package: blender
+    description: High-fidelity 3D hub (blend/gltf/fbx/obj/stl/dae/abc/usd)
+    categories: [model3d]
+    note: headless adapter (blender -b with embedded python) pending (Phase 3)
+    probe: {args: [--version], version_regex: 'Blender ([^\s]+)'}
+
+  - engine: fonttools
+    binary: fonttools
+    package: python-fonttools
+    description: Font converter — TTF/OTF/WOFF/WOFF2
+    categories: [font]
+    note: version probing via --version prints a traceback; detection only
+    probe: {}
+    routes:
+      - from: [font/ttf, font/otf]
+        to: [font/woff2]
+        lossless: true
+        priority: 95
+        command: "fonttools ttLib.woff2 compress -o {output} {input}"
+      - from: [font/woff2]
+        to: [font/ttf, font/otf]
+        lossless: true
+        priority: 95
+        command: "fonttools ttLib.woff2 decompress -o {output} {input}"
+      - from: [font/ttf, font/otf]
+        to: [font/woff]
+        lossless: true
+        priority: 90
+        command: "fonttools ttLib.woff compress -o {output} {input}"
+      - from: [font/woff, font/woff2]
+        to: [font/ttf, font/otf]
+        lossless: true
+        priority: 90
+        command: "fonttools ttLib.woff decompress -o {output} {input}"
+
+  - engine: ogr2ogr
+    binary: ogr2ogr
+    package: gdal
+    description: Geospatial vector converter (GeoJSON/KML/GPKG/...)
+    categories: [gis]
+    probe: {args: [--version], version_regex: 'GDAL ([^\s]+)'}
+    routes:
+      - from: [application/geo+json, application/vnd.google-earth.kml+xml,
+               application/geopackage+sqlite3]
+        to: [application/geo+json, application/vnd.google-earth.kml+xml,
+             application/geopackage+sqlite3]
+        lossless: false
+        priority: 95
+        command: "ogr2ogr -f {ofmt} {output} {input}"
+        vars:
+          ofmt:
+            application/geo+json: GeoJSON
+            application/vnd.google-earth.kml+xml: KML
+            application/geopackage+sqlite3: GPKG
+
+  - engine: whisper
+    binary: whisper-cli
+    package: whisper.cpp-cublas
+    description: Offline speech-to-text (audio/video to SRT/VTT/TXT)
+    categories: [audio, subtitle]
+    note: requires a local GGML model; adapter pending (Phase 3).
+          FFmpeg 8's built-in whisper filter is the alternative path.
+    probe: {}
+
+  - engine: piper
+    binary: piper
+    package: piper-tts-bin
+    description: Offline text-to-speech (TXT to WAV)
+    categories: [audio]
+    note: requires local voice models; adapter pending (Phase 3)
+    probe: {}

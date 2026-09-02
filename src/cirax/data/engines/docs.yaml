@@ -1,0 +1,122 @@
+# Document, office, and ebook engines.
+
+engines:
+  - engine: libreoffice
+    binary: soffice
+    package: libreoffice-still
+    description: Office hub — word processor, sheets, slides to PDF/HTML/text
+    categories: [document, spreadsheet, presentation]
+    probe:
+      args: [--version]
+      version_regex: 'LibreOffice ([^\s]+)'
+    routes:
+      - from: [application/vnd.openxmlformats-officedocument.wordprocessingml.document,
+               application/msword, application/vnd.oasis.opendocument.text,
+               application/rtf, text/markdown, text/html, text/plain]
+        to: [application/pdf, text/html, text/plain,
+             application/vnd.oasis.opendocument.text,
+             application/vnd.openxmlformats-officedocument.wordprocessingml.document,
+             application/epub+zip]
+        lossless: false
+        priority: 88
+        output_mode: outdir
+        command: "soffice --headless --norestore --convert-to {output_ext} --outdir {outdir} {input}"
+      - from: [application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,
+               application/vnd.ms-excel, application/vnd.oasis.opendocument.spreadsheet,
+               text/csv, text/tab-separated-values]
+        to: [application/pdf, text/csv,
+             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,
+             application/vnd.oasis.opendocument.spreadsheet]
+        lossless: false
+        priority: 88
+        output_mode: outdir
+        command: "soffice --headless --norestore --convert-to {output_ext} --outdir {outdir} {input}"
+      - from: [application/vnd.openxmlformats-officedocument.presentationml.presentation,
+               application/vnd.ms-powerpoint,
+               application/vnd.oasis.opendocument.presentation]
+        to: [application/pdf]
+        lossless: false
+        priority: 88
+        output_mode: outdir
+        command: "soffice --headless --norestore --convert-to {output_ext} --outdir {outdir} {input}"
+
+  - engine: pandoc
+    binary: pandoc
+    package: pandoc
+    description: Universal markup converter
+    categories: [document]
+    probe: {args: [--version], version_regex: 'pandoc ([^\s]+)'}
+    routes:
+      - from: [text/markdown, text/html, text/x-tex, text/x-typst,
+               application/vnd.openxmlformats-officedocument.wordprocessingml.document,
+               application/vnd.oasis.opendocument.text, application/rtf,
+               application/epub+zip, text/plain, text/org, text/x-rst]
+        to: [application/vnd.openxmlformats-officedocument.wordprocessingml.document,
+             application/vnd.oasis.opendocument.text, application/rtf,
+             text/html, text/markdown, text/plain, application/epub+zip,
+             text/x-tex, text/org, text/x-rst]
+        lossless: false
+        priority: 85
+        command: "pandoc {input} -o {output}"
+
+  - engine: calibre
+    binary: ebook-convert
+    package: calibre
+    description: The ebook king — every reader format to every writer format
+    categories: [ebook, document]
+    probe: {args: [--version], version_regex: 'ebook-convert.*?([^\s]+)\)?'}
+    routes:
+      - from: [application/epub+zip, application/x-mobipocket-ebook,
+               application/vnd.amazon.ebook, application/x-fictionbook+xml,
+               application/vnd.comicbook+zip,
+               application/vnd.openxmlformats-officedocument.wordprocessingml.document,
+               text/html, text/plain, text/markdown]
+        to: [application/epub+zip, application/x-mobipocket-ebook,
+             application/vnd.amazon.ebook, application/pdf, text/plain,
+             application/vnd.openxmlformats-officedocument.wordprocessingml.document,
+             text/html]
+        lossless: false
+        priority: 90
+        command: "ebook-convert {input} {output}"
+
+  - engine: weasyprint
+    binary: weasyprint
+    package: python-weasyprint
+    description: Print-grade HTML to PDF (CSS paged media)
+    categories: [document]
+    probe: {args: [--version], version_regex: '([^\s]+)'}
+    routes:
+      - from: [text/html]
+        to: [application/pdf]
+        lossless: false
+        priority: 92
+        command: "weasyprint {input} {output}"
+
+  - engine: typst
+    binary: typst
+    package: typst
+    description: Modern typesetting — Typst to PDF/PNG
+    categories: [document]
+    probe: {args: [--version], version_regex: 'typst ([^\s]+)'}
+    routes:
+      - from: [text/x-typst]
+        to: [application/pdf, image/png]
+        lossless: false
+        priority: 95
+        command: "typst compile {input} {output}"
+
+  - engine: tectonic
+    binary: tectonic
+    package: tectonic
+    description: Self-contained LaTeX engine — TeX to PDF
+    categories: [document]
+    note: "downloads packages on first use of a given preamble (network);
+          subsequent runs are offline. Alternative: texlive xelatex."
+    probe: {args: [--version], version_regex: 'Tectonic ([^\s]+)'}
+    routes:
+      - from: [text/x-tex]
+        to: [application/pdf]
+        lossless: false
+        priority: 90
+        output_mode: outdir
+        command: "tectonic --outdir {outdir} {input}"

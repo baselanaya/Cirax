@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+npm/node_modules/
+npm/.venv/
+npm/python/
+npm/*.tgz
+.claude/

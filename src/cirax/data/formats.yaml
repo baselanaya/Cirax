@@ -1,0 +1,280 @@
+# Cirax format vocabulary.
+#
+# `formats` maps our canonical MIME-ish identifiers to canonical extensions.
+# `domains` group formats and declare the pivot formats the router chains
+# through. `ext_to_mime` is the deterministic extension detection table
+# (takes priority over file(1) content sniffing).
+
+domains:
+  video:
+    pivot: [video/x-matroska, video/mp4]
+  audio:
+    pivot: [audio/flac, audio/x-wav]
+  image:
+    pivot: [image/png, image/jpeg]
+  document:
+    pivot: [application/pdf, text/plain, text/html]
+  spreadsheet:
+    pivot: [text/csv, application/pdf]
+  presentation:
+    pivot: [application/pdf]
+  ebook:
+    pivot: [application/epub+zip, application/pdf]
+  archive:
+    pivot: [application/x-tar, application/x-tree]
+  data:
+    pivot: [application/json, text/csv]
+  font:
+    pivot: [font/ttf]
+  model3d:
+    pivot: [model/gltf-binary, model/obj]
+  subtitle:
+    pivot: [application/x-subrip]
+  gis:
+    pivot: [application/geo+json]
+  compression:
+    pivot: [application/zstd]
+
+formats:
+  # video
+  video/mp4: {ext: mp4, name: MPEG-4 video}
+  video/x-matroska: {ext: mkv, name: Matroska}
+  video/webm: {ext: webm, name: WebM}
+  video/x-msvideo: {ext: avi, name: AVI}
+  video/quicktime: {ext: mov, name: QuickTime}
+  video/x-flv: {ext: flv, name: Flash Video}
+  video/mpeg: {ext: mpeg, name: MPEG program stream}
+  video/mp2t: {ext: ts, name: MPEG transport stream}
+  video/ogg: {ext: ogv, name: Ogg video}
+  video/x-m4v: {ext: m4v, name: iTunes video}
+  # audio
+  audio/mpeg: {ext: mp3, name: MP3}
+  audio/aac: {ext: aac, name: raw AAC}
+  audio/mp4: {ext: m4a, name: AAC in MP4}
+  audio/opus: {ext: opus, name: Opus}
+  audio/ogg: {ext: ogg, name: Ogg Vorbis}
+  audio/flac: {ext: flac, name: FLAC}
+  audio/x-wav: {ext: wav, name: WAV PCM}
+  audio/aiff: {ext: aiff, name: AIFF}
+  audio/x-ms-wma: {ext: wma, name: Windows Media Audio}
+  audio/amr: {ext: amr, name: AMR narrowband}
+  # image
+  image/png: {ext: png, name: PNG}
+  image/jpeg: {ext: jpg, name: JPEG}
+  image/webp: {ext: webp, name: WebP}
+  image/avif: {ext: avif, name: AVIF}
+  image/jxl: {ext: jxl, name: JPEG XL}
+  image/heic: {ext: heic, name: HEIC}
+  image/tiff: {ext: tiff, name: TIFF}
+  image/bmp: {ext: bmp, name: BMP}
+  image/gif: {ext: gif, name: GIF}
+  image/vnd.microsoft.icon: {ext: ico, name: Windows icon}
+  image/x-tga: {ext: tga, name: Truevision TGA}
+  image/vnd.adobe.photoshop: {ext: psd, name: Photoshop}
+  image/x-xcf: {ext: xcf, name: GIMP XCF}
+  image/svg+xml: {ext: svg, name: SVG vector}
+  image/x-dng: {ext: dng, name: Digital Negative RAW}
+  image/x-cr2: {ext: cr2, name: Canon RAW 2}
+  image/x-cr3: {ext: cr3, name: Canon RAW 3}
+  image/x-nef: {ext: nef, name: Nikon RAW}
+  image/x-arw: {ext: arw, name: Sony RAW}
+  image/x-orf: {ext: orf, name: Olympus RAW}
+  image/x-raf: {ext: raf, name: Fujifilm RAW}
+  image/x-rw2: {ext: rw2, name: Panasonic RAW}
+  # document
+  application/pdf: {ext: pdf, name: PDF}
+  application/vnd.openxmlformats-officedocument.wordprocessingml.document: {ext: docx, name: Word (OOXML)}
+  application/msword: {ext: doc, name: Word (legacy)}
+  application/vnd.oasis.opendocument.text: {ext: odt, name: OpenDocument text}
+  application/rtf: {ext: rtf, name: Rich Text}
+  text/html: {ext: html, name: HTML}
+  text/markdown: {ext: md, name: Markdown}
+  text/x-tex: {ext: tex, name: LaTeX}
+  text/x-typst: {ext: typ, name: Typst}
+  text/plain: {ext: txt, name: Plain text}
+  text/org: {ext: org, name: Org mode}
+  text/x-rst: {ext: rst, name: reStructuredText}
+  text/x-ps: {ext: ps, name: PostScript}
+  # spreadsheet
+  application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {ext: xlsx, name: Excel (OOXML)}
+  application/vnd.ms-excel: {ext: xls, name: Excel (legacy)}
+  application/vnd.oasis.opendocument.spreadsheet: {ext: ods, name: OpenDocument sheet}
+  text/csv: {ext: csv, name: CSV}
+  text/tab-separated-values: {ext: tsv, name: TSV}
+  application/x-parquet: {ext: parquet, name: Apache Parquet}
+  # presentation
+  application/vnd.openxmlformats-officedocument.presentationml.presentation: {ext: pptx, name: PowerPoint (OOXML)}
+  application/vnd.ms-powerpoint: {ext: ppt, name: PowerPoint (legacy)}
+  application/vnd.oasis.opendocument.presentation: {ext: odp, name: OpenDocument slides}
+  # ebook
+  application/epub+zip: {ext: epub, name: EPUB}
+  application/x-mobipocket-ebook: {ext: mobi, name: Mobipocket}
+  application/vnd.amazon.ebook: {ext: azw3, name: Kindle AZW3}
+  application/x-fictionbook+xml: {ext: fb2, name: FictionBook}
+  application/vnd.comicbook+zip: {ext: cbz, name: Comic book ZIP}
+  # archive
+  application/zip: {ext: zip, name: ZIP}
+  application/x-7z-compressed: {ext: 7z, name: 7-Zip}
+  application/x-tar: {ext: tar, name: tar}
+  application/vnd.rar: {ext: rar, name: RAR}
+  application/x-iso9660-image: {ext: iso, name: ISO 9660}
+  application/x-qemu-disk: {ext: qcow2, name: QEMU copy-on-write}
+  application/x-vmdk: {ext: vmdk, name: VMware disk}
+  application/x-vdi: {ext: vdi, name: VirtualBox disk}
+  application/x-vhd: {ext: vhd, name: Hyper-V disk}
+  application/x-vhdx: {ext: vhdx, name: Hyper-V disk (v2)}
+  application/x-raw-disk: {ext: img, name: Raw disk image}
+  application/x-tree: {ext: tree, name: extracted tree (internal)}
+  # compression (single-file)
+  application/zstd: {ext: zst, name: Zstandard}
+  application/gzip: {ext: gz, name: gzip}
+  application/x-xz: {ext: xz, name: xz}
+  # data
+  application/json: {ext: json, name: JSON}
+  application/x-ndjson: {ext: jsonl, name: newline-delimited JSON}
+  application/yaml: {ext: yaml, name: YAML}
+  application/xml: {ext: xml, name: XML}
+  # font
+  font/ttf: {ext: ttf, name: TrueType}
+  font/otf: {ext: otf, name: OpenType}
+  font/woff: {ext: woff, name: WOFF}
+  font/woff2: {ext: woff2, name: WOFF2}
+  # 3D
+  model/gltf+json: {ext: gltf, name: glTF}
+  model/gltf-binary: {ext: glb, name: glTF binary}
+  model/obj: {ext: obj, name: Wavefront OBJ}
+  model/stl: {ext: stl, name: STL}
+  model/ply: {ext: ply, name: Stanford PLY}
+  model/fbx: {ext: fbx, name: Autodesk FBX}
+  model/vnd.collada+xml: {ext: dae, name: COLLADA}
+  model/x-blend: {ext: blend, name: Blender}
+  model/3mf: {ext: 3mf, name: 3MF}
+  model/3ds: {ext: 3ds, name: Autodesk 3DS}
+  model/x3d: {ext: x3d, name: X3D}
+  # subtitle
+  application/x-subrip: {ext: srt, name: SubRip}
+  text/vtt: {ext: vtt, name: WebVTT}
+  text/x-ssa: {ext: ass, name: SSA/ASS}
+  # gis
+  application/geo+json: {ext: geojson, name: GeoJSON}
+  application/vnd.google-earth.kml+xml: {ext: kml, name: KML}
+  application/geopackage+sqlite3: {ext: gpkg, name: GeoPackage}
+
+ext_to_mime:
+  mp4: video/mp4
+  m4v: video/x-m4v
+  mkv: video/x-matroska
+  webm: video/webm
+  avi: video/x-msvideo
+  mov: video/quicktime
+  flv: video/x-flv
+  mpg: video/mpeg
+  mpeg: video/mpeg
+  ts: video/mp2t
+  ogv: video/ogg
+  mp3: audio/mpeg
+  aac: audio/aac
+  m4a: audio/mp4
+  opus: audio/opus
+  ogg: audio/ogg
+  oga: audio/ogg
+  flac: audio/flac
+  wav: audio/x-wav
+  aiff: audio/aiff
+  aif: audio/aiff
+  wma: audio/x-ms-wma
+  amr: audio/amr
+  png: image/png
+  jpg: image/jpeg
+  jpeg: image/jpeg
+  webp: image/webp
+  avif: image/avif
+  jxl: image/jxl
+  heic: image/heic
+  heif: image/heic
+  tif: image/tiff
+  tiff: image/tiff
+  bmp: image/bmp
+  gif: image/gif
+  ico: image/vnd.microsoft.icon
+  tga: image/x-tga
+  psd: image/vnd.adobe.photoshop
+  xcf: image/x-xcf
+  svg: image/svg+xml
+  dng: image/x-dng
+  cr2: image/x-cr2
+  cr3: image/x-cr3
+  nef: image/x-nef
+  arw: image/x-arw
+  orf: image/x-orf
+  raf: image/x-raf
+  rw2: image/x-rw2
+  pdf: application/pdf
+  docx: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+  doc: application/msword
+  odt: application/vnd.oasis.opendocument.text
+  rtf: application/rtf
+  html: text/html
+  htm: text/html
+  md: text/markdown
+  markdown: text/markdown
+  typ: text/x-typst
+  tex: text/x-tex
+  txt: text/plain
+  org: text/org
+  rst: text/x-rst
+  ps: text/x-ps
+  xlsx: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+  xls: application/vnd.ms-excel
+  ods: application/vnd.oasis.opendocument.spreadsheet
+  csv: text/csv
+  tsv: text/tab-separated-values
+  parquet: application/x-parquet
+  pptx: application/vnd.openxmlformats-officedocument.presentationml.presentation
+  ppt: application/vnd.ms-powerpoint
+  odp: application/vnd.oasis.opendocument.presentation
+  epub: application/epub+zip
+  mobi: application/x-mobipocket-ebook
+  azw3: application/vnd.amazon.ebook
+  fb2: application/x-fictionbook+xml
+  cbz: application/vnd.comicbook+zip
+  zip: application/zip
+  "7z": application/x-7z-compressed
+  tar: application/x-tar
+  rar: application/vnd.rar
+  iso: application/x-iso9660-image
+  qcow2: application/x-qemu-disk
+  qcow: application/x-qemu-disk
+  vmdk: application/x-vmdk
+  vdi: application/x-vdi
+  vhd: application/x-vhd
+  vhdx: application/x-vhdx
+  zst: application/zstd
+  gz: application/gzip
+  xz: application/x-xz
+  json: application/json
+  jsonl: application/x-ndjson
+  yaml: application/yaml
+  yml: application/yaml
+  xml: application/xml
+  ttf: font/ttf
+  otf: font/otf
+  woff: font/woff
+  woff2: font/woff2
+  gltf: model/gltf+json
+  glb: model/gltf-binary
+  obj: model/obj
+  stl: model/stl
+  ply: model/ply
+  fbx: model/fbx
+  dae: model/vnd.collada+xml
+  blend: model/x-blend
+  "3mf": model/3mf
+  "3ds": model/3ds
+  x3d: model/x3d
+  srt: application/x-subrip
+  vtt: text/vtt
+  ass: text/x-ssa
+  geojson: application/geo+json
+  kml: application/vnd.google-earth.kml+xml
+  gpkg: application/geopackage+sqlite3

@@ -1,0 +1,162 @@
+# PDF engines. qpdf = lossless surgery, ghostscript = compress/rasterize,
+# poppler/mupdf = extract & rasterize, img2pdf = lossless embed, OCR tier.
+
+engines:
+  - engine: qpdf
+    binary: qpdf
+    package: qpdf
+    description: Lossless PDF surgery — merge, split, linearize, repair
+    categories: [document]
+    probe: {args: [--version], version_regex: 'qpdf version ([^\s]+)'}
+    routes:
+      - from: [application/pdf]
+        to: [application/pdf]
+        lossless: true
+        priority: 70
+        note: lossless re-write + web optimization (linearization)
+        command: "qpdf --linearize {input} {output}"
+
+  - engine: ghostscript
+    binary: gs
+    package: ghostscript
+    description: PDF/PostScript compression and rasterization
+    categories: [document]
+    probe: {args: [--version], version_regex: '^(\d[\d.]+)'}
+    routes:
+      - from: [application/pdf]
+        to: [application/pdf]
+        lossless: false
+        priority: 45
+        note: downsamples images for size (~ebook quality)
+        command: >-
+          gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.5 -dPDFSETTINGS=/ebook
+          -dNOPAUSE -dQUIET -dBATCH -dSAFER -sOutputFile={output} {input}
+      - from: [application/pdf]
+        to: [image/png, image/jpeg]
+        lossless: false
+        priority: 40
+        multipage: true
+        note: first-page raster at 150 dpi (poppler usually preferred)
+        command: >-
+          gs -sDEVICE={dev} -r150 -dFirstPage=1 -dLastPage=1 -dNOPAUSE -dQUIET
+          -dBATCH -dSAFER -sOutputFile={output} {input}
+        command_multipage: >-
+          gs -sDEVICE={dev} -r150 -dFirstPage={first_page}
+          -dLastPage={last_page} -dNOPAUSE -dQUIET -dBATCH -dSAFER
+          -sOutputFile={output_printf} {input}
+        vars:
+          dev:
+            image/png: png16m
+            image/jpeg: jpeg
+      - from: [text/x-ps]
+        to: [application/pdf]
+        lossless: false
+        priority: 90
+        command: >-
+          gs -sDEVICE=pdfwrite -dNOPAUSE -dQUIET -dBATCH -dSAFER
+          -sOutputFile={output} {input}
+
+  - engine: pdftotext
+    binary: pdftotext
+    package: poppler
+    description: PDF text extraction (Poppler)
+    categories: [document]
+    probe: {args: [-v], version_regex: 'pdftotext version ([^\s]+)'}
+    routes:
+      - from: [application/pdf]
+        to: [text/plain]
+        lossless: false
+        priority: 95
+        command: "pdftotext {input} {output}"
+
+  - engine: pdftoppm
+    binary: pdftoppm
+    package: poppler
+    description: PDF rasterizer (Poppler)
+    categories: [document, image]
+    probe: {args: [-v], version_regex: 'pdftoppm version ([^\s]+)'}
+    routes:
+      - from: [application/pdf]
+        to: [image/png, image/jpeg]
+        lossless: false
+        priority: 90
+        multipage: true
+        note: default rasterizes the first page; --pages all|N|M-K rasterizes more
+        command: "pdftoppm -singlefile -r 150 -{ext} {input} {output_stem}"
+        command_multipage: "pdftoppm -r 150 -{ext} -f {first_page} -l {last_page} {input} {output_pattern}"
+        vars:
+          ext:
+            image/png: png
+            image/jpeg: jpeg
+
+  - engine: pdftocairo
+    binary: pdftocairo
+    package: poppler
+    description: PDF to PNG/JPEG/SVG via cairo (Poppler)
+    categories: [document, image]
+    probe: {args: [-v], version_regex: 'pdftocairo version ([^\s]+)'}
+    routes:
+      - from: [application/pdf]
+        to: [image/svg+xml]
+        lossless: false
+        priority: 90
+        note: first page (multi-page expansion lands in Phase 1)
+        command: "pdftocairo -svg -singlefile {input} {output_stem}"
+
+  - engine: mutool
+    binary: mutool
+    package: mupdf-tools
+    description: MuPDF — clean, garbage-collect, repair PDFs
+    categories: [document]
+    probe: {args: [-v], version_regex: 'MuPDF v?([^\s]+)'}
+    routes:
+      - from: [application/pdf]
+        to: [application/pdf]
+        lossless: true
+        priority: 60
+        note: lossless rewrite with garbage collection of dead objects
+        command: "mutool clean -gggg {input} {output}"
+
+  - engine: img2pdf
+    binary: img2pdf
+    package: img2pdf
+    description: Lossless image-to-PDF (embeds, never recompresses)
+    categories: [image, document]
+    probe: {args: [--version], version_regex: '([^\s]+)'}
+    routes:
+      - from: [image/jpeg, image/png, image/tiff]
+        to: [application/pdf]
+        lossless: true
+        priority: 90
+        command: "img2pdf -o {output} {input}"
+
+  - engine: ocrmypdf
+    binary: ocrmypdf
+    package: ocrmypdf
+    description: Add an OCR text layer to scanned PDFs
+    categories: [document]
+    probe: {args: [--version], version_regex: '([^\s]+)'}
+    routes:
+      - from: [application/pdf]
+        to: [application/pdf]
+        lossless: true
+        priority: 50
+        note: same format, adds a searchable text layer
+        command: "ocrmypdf -q {input} {output}"
+
+  - engine: tesseract
+    binary: tesseract
+    package: tesseract tesseract-data-eng
+    description: OCR — images to text or searchable PDF
+    categories: [image, document]
+    probe: {args: [--version], version_regex: 'tesseract ([^\s]+)'}
+    routes:
+      - from: [image/png, image/jpeg, image/tiff, image/bmp]
+        to: [text/plain, application/pdf]
+        lossless: false
+        priority: 90
+        command: "tesseract {input} {output_stem} {mode}"
+        vars:
+          mode:
+            text/plain: txt
+            application/pdf: pdf

@@ -1,0 +1,117 @@
+# Data & serialization engines.
+
+engines:
+  - engine: yq
+    binary: yq
+    package: go-yq
+    description: Polyglot data converter — JSON/YAML/XML/CSV/TSV/properties
+    categories: [data]
+    probe: {args: [--version], version_regex: 'yq \(https://github.com/mikefarah/yq/\) version ([^\s]+)'}
+    routes:
+      - from: [application/json, application/yaml, application/xml,
+               text/csv, text/tab-separated-values]
+        to: [application/json, application/yaml, application/xml,
+             text/csv, text/tab-separated-values]
+        lossless: false
+        priority: 85
+        command: "yq -p {infmt} -o {outfmt} {input}"
+        vars:
+          infmt:
+            application/json: json
+            application/yaml: yaml
+            application/xml: xml
+            text/csv: csv
+            text/tab-separated-values: tsv
+          outfmt:
+            application/json: json
+            application/yaml: yaml
+            application/xml: xml
+            text/csv: csv
+            text/tab-separated-values: tsv
+
+  - engine: miller
+    binary: mlr
+    package: miller
+    description: Record-format converter and processor (CSV/TSV/JSON/JSONL)
+    categories: [data]
+    probe: {args: [--version], version_regex: 'mlr ([^\s]+)'}
+    routes:
+      - from: [text/csv, text/tab-separated-values, application/json,
+               application/x-ndjson]
+        to: [text/csv, text/tab-separated-values, application/json,
+             application/x-ndjson]
+        lossless: false
+        priority: 60
+        command: "mlr --{infmt} --{outfmt} cat {input}"
+        vars:
+          infmt:
+            text/csv: icsv
+            text/tab-separated-values: itsv
+            application/json: ijson
+            application/x-ndjson: ijson
+          outfmt:
+            text/csv: ocsv
+            text/tab-separated-values: otsv
+            application/json: ojson
+            application/x-ndjson: ojson
+
+  - engine: duckdb
+    binary: duckdb
+    package: duckdb
+    description: Tabular Swiss knife — CSV/Parquet/JSON interconvert via SQL
+    categories: [data, spreadsheet]
+    probe: {args: [--version], version_regex: 'v([^\s]+)'}
+    routes:
+      - from: [text/csv]
+        to: [application/x-parquet]
+        lossless: true
+        priority: 88
+        command: "duckdb -noheader -list -c \"COPY (SELECT * FROM read_csv_auto('{input}')) TO '{output}' (FORMAT PARQUET)\""
+      - from: [application/x-parquet]
+        to: [text/csv, application/json]
+        lossless: false
+        priority: 88
+        command: "duckdb -noheader -list -c \"COPY (SELECT * FROM read_parquet('{input}')) TO '{output}' (FORMAT {fmt}, HEADER)\""
+        vars:
+          fmt:
+            text/csv: CSV
+            application/json: JSON
+      - from: [application/x-ndjson]
+        to: [text/csv, application/x-parquet]
+        lossless: false
+        priority: 80
+        command: "duckdb -noheader -list -c \"COPY (SELECT * FROM read_json_auto('{input}')) TO '{output}' (FORMAT {fmt})\""
+        vars:
+          fmt:
+            text/csv: CSV
+            application/x-parquet: PARQUET
+
+  - engine: jq
+    binary: jq
+    package: jq
+    description: JSON processor (pretty-print/minify routes here)
+    categories: [data]
+    probe: {args: [--version], version_regex: 'jq-([^\s]+)'}
+    routes:
+      - from: [application/json]
+        to: [application/json]
+        lossless: true
+        priority: 40
+        note: re-format (pretty-print); minify with future --compact preset
+        command: "jq . {input}"
+
+  - engine: iconv
+    binary: iconv
+    package: glibc
+    description: Text encoding converter (UTF-8, Latin-1, Shift-JIS, ...)
+    categories: [data]
+    note: charset operations — adapter with charset options pending (Phase 2)
+    probe: {args: [--version], version_regex: 'iconv \(GLIBC[^)]*\) ([^\s]+)'}
+
+  - engine: dos2unix
+    binary: dos2unix
+    package: dos2unix
+    description: Line-ending converter
+    categories: [data]
+    note: text operations — adapter pending (Phase 2)
+    probe: {args: [--version], version_regex: 'dos2unix ([^\s]+)'}

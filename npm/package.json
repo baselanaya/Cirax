@@ -1,0 +1,38 @@
+{
+  "name": "cirax",
+  "version": "0.2.0",
+  "description": "Universal local conversion hub — every format to every format, fully offline on Linux. npm wrapper that installs the Python core.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cirax/cirax.git"
+  },
+  "keywords": [
+    "converter",
+    "ffmpeg",
+    "imagemagick",
+    "libreoffice",
+    "offline",
+    "local-first",
+    "cli"
+  ],
+  "bin": {
+    "cirax": "bin/cirax.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js",
+    "build:python": "bash scripts/bundle-python.sh"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "python/"
+  ],
+  "engines": {
+    "node": ">=16",
+    "os": [
+      "linux",
+      "darwin"
+    ]
+  }
+}

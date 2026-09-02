@@ -1,0 +1,256 @@
+# Image engines. libvips + ImageMagick are the two spines; codec CLIs are
+# best-in-class specialists; Inkscape/potrace/vtracer cover vector.
+
+engines:
+  - engine: vips
+    binary: vips
+    package: libvips
+    description: Fast low-memory raster converter — spine for batch image jobs
+    categories: [image]
+    probe:
+      args: [--version]
+      version_regex: 'vips-?([^\s]+)'
+    presets:
+      web:
+        flags: {image/jpeg: "[Q=75]", image/webp: "[Q=70]", image/avif: "[Q=55]"}
+      hq:
+        flags: {image/jpeg: "[Q=95]", image/webp: "[Q=92]", image/avif: "[Q=85]"}
+    routes:
+      - from: [image/jpeg, image/png, image/tiff, image/webp, image/avif,
+               image/jxl, image/heic, image/gif]
+        to: [image/jpeg, image/png, image/tiff, image/webp, image/avif,
+             image/jxl, image/heic, image/gif]
+        lossless: false
+        priority: 92
+        command: "vips copy {input} {output}{flags}"
+
+  - engine: imagemagick
+    binary: magick
+    package: imagemagick
+    description: Widest image format net (300+), PDF rasters included
+    categories: [image]
+    probe:
+      args: [-version]
+      version_regex: 'Version: ImageMagick ([^\s]+)'
+    presets:
+      web:
+        flags: {image/jpeg: "-quality 75", image/webp: "-quality 70", image/avif: "-quality 60"}
+      hq:
+        flags: {image/jpeg: "-quality 97", image/webp: "-quality 95", image/avif: "-quality 90"}
+    routes:
+      - from: [image/jpeg, image/png, image/webp, image/avif, image/jxl,
+               image/heic, image/tiff, image/bmp, image/gif,
+               image/vnd.microsoft.icon, image/x-tga,
+               image/vnd.adobe.photoshop, image/x-xcf, image/svg+xml,
+               application/pdf]
+        to: [image/jpeg, image/png, image/webp, image/avif, image/jxl,
+             image/tiff, image/bmp, image/gif, image/vnd.microsoft.icon,
+             image/x-tga, application/pdf]
+        lossless: false
+        priority: 80
+        command: "magick {input} {flags} {output}"
+        vars:
+          flags:
+            image/jpeg: "-quality 90"
+            image/webp: "-quality 85"
+            image/avif: "-quality 80"
+            image/png: "-define png:compression-level=9"
+            application/pdf: "-compress jpeg -quality 90"
+
+  - engine: cwebp
+    binary: cwebp
+    package: libwebp
+    description: Reference WebP encoder
+    categories: [image]
+    probe: {args: [-version], version_regex: '([^\s]+)'}
+    routes:
+      - from: [image/png, image/jpeg, image/tiff, image/webp]
+        to: [image/webp]
+        lossless: false
+        priority: 50
+        command: "cwebp -quiet -q 85 {input} -o {output}"
+
+  - engine: dwebp
+    binary: dwebp
+    package: libwebp
+    description: Reference WebP decoder
+    categories: [image]
+    probe: {args: [-version], version_regex: '([^\s]+)'}
+    routes:
+      - from: [image/webp]
+        to: [image/png]
+        lossless: true
+        priority: 95
+        command: "dwebp {input} -o {output}"
+
+  - engine: avifenc
+    binary: avifenc
+    package: libavif
+    description: Reference AVIF encoder
+    categories: [image]
+    probe: {args: [--version], version_regex: 'Version: v?([^\s]+)'}
+    routes:
+      - from: [image/png, image/jpeg]
+        to: [image/avif]
+        lossless: false
+        priority: 50
+        command: "avifenc {input} {output}"
+
+  - engine: cjxl
+    binary: cjxl
+    package: libjxl
+    description: Reference JPEG XL encoder
+    categories: [image]
+    probe: {args: [--version], version_regex: 'cjxl v([^\s]+)'}
+    routes:
+      - from: [image/png, image/jpeg]
+        to: [image/jxl]
+        lossless: true
+        priority: 55
+        command: "cjxl --quiet {input} {output}"
+
+  - engine: djxl
+    binary: djxl
+    package: libjxl
+    description: Reference JPEG XL decoder
+    categories: [image]
+    probe: {args: [--version], version_regex: 'djxl v([^\s]+)'}
+    routes:
+      - from: [image/jxl]
+        to: [image/png, image/jpeg]
+        lossless: true
+        priority: 95
+        command: "djxl {input} {output}"
+
+  - engine: heif-convert
+    binary: heif-convert
+    package: libheif
+    description: HEIC/HEIF decoder (iPhone photos)
+    categories: [image]
+    probe: {args: [--version], version_regex: '([^\s]+)'}
+    routes:
+      - from: [image/heic]
+        to: [image/jpeg, image/png]
+        lossless: false
+        priority: 95
+        command: "heif-convert -q 92 {input} {output}"
+
+  - engine: oxipng
+    binary: oxipng
+    package: oxipng
+    description: Lossless PNG optimizer
+    categories: [image]
+    probe: {args: [--version], version_regex: 'oxipng ([^\s]+)'}
+    routes:
+      - from: [image/png]
+        to: [image/png]
+        lossless: true
+        priority: 50
+        command: "oxipng -q -o 2 --strip safe --out {output} {input}"
+
+  - engine: pngquant
+    binary: pngquant
+    package: pngquant
+    description: Palette-quantizing PNG compressor (lossy, dramatic savings)
+    categories: [image]
+    probe: {args: [--version], version_regex: '([^\s]+)'}
+    routes:
+      - from: [image/png]
+        to: [image/png]
+        lossless: false
+        priority: 30
+        command: "pngquant --quality 60-90 --speed 2 --force --output {output} {input}"
+
+  - engine: darktable-cli
+    binary: darktable-cli
+    package: darktable
+    description: Camera RAW developer — highest-quality RAW conversion
+    categories: [image]
+    probe: {args: [--version], version_regex: 'darktable ([^\s]+)'}
+    routes:
+      - from: [image/x-dng, image/x-cr2, image/x-cr3, image/x-nef, image/x-arw,
+               image/x-orf, image/x-raf, image/x-rw2]
+        to: [image/jpeg, image/png, image/tiff, image/webp]
+        lossless: false
+        priority: 90
+        command: "darktable-cli {input} {output}"
+
+  - engine: gimp
+    binary: gimp
+    package: gimp
+    description: XCF and layered-image surgery via script-fu batch
+    categories: [image]
+    probe: {args: [--version], version_regex: 'GIMP ([^\s]+)'}
+    routes:
+      - from: [image/x-xcf]
+        to: [image/png, image/jpeg]
+        lossless: false
+        priority: 95
+        note: flatten + export; magick reads XCF too but imperfectly
+        command: >-
+          gimp -i -d -f -b '(let* ((image (car (gimp-file-load RUN-NONINTERACTIVE "{input}" "{input}"))) (drawable (car (gimp-image-flatten image)))) (file-jpeg-save RUN-NONINTERACTIVE image drawable "{output}" "{output}" 0.92 0 1 0 "" 0 1 0 0) (gimp-quit 0))'
+
+  - engine: inkscape
+    binary: inkscape
+    package: inkscape
+    description: Vector hub — SVG to/from PDF, PNG, PS, EPS, EMF, WMF
+    categories: [image, document]
+    probe: {args: [--version], version_regex: 'Inkscape ([^\s]+)'}
+    routes:
+      - from: [image/svg+xml]
+        to: [image/png, application/pdf]
+        lossless: false
+        priority: 85
+        command: "inkscape {input} --export-filename={output}"
+
+  - engine: rsvg-convert
+    binary: rsvg-convert
+    package: librsvg
+    description: Fast correct SVG rasterizer
+    categories: [image]
+    probe: {args: [--version], version_regex: 'rsvg-convert version ([^\s]+)'}
+    routes:
+      - from: [image/svg+xml]
+        to: [image/png, application/pdf]
+        lossless: false
+        priority: 90
+        command: "rsvg-convert -f {fmt} -o {output} {input}"
+        vars:
+          fmt:
+            image/png: png
+            application/pdf: pdf
+
+  - engine: potrace
+    binary: potrace
+    package: potrace
+    description: Bitmap-to-vector tracer (monochrome)
+    categories: [image]
+    probe: {args: [--version], version_regex: 'Potrace version ([^\s]+)'}
+    routes:
+      - from: [image/bmp]
+        to: [image/svg+xml]
+        lossless: false
+        priority: 50
+        note: bitmap tracing; chain png -> bmp (imagemagick) -> svg (potrace)
+        command: "potrace -s -o {output} {input}"
+
+  - engine: vtracer
+    binary: vtracer
+    package: vtracer
+    description: Full-color bitmap-to-vector tracer
+    categories: [image]
+    probe: {args: [--version], version_regex: '([^\s]+)'}
+    routes:
+      - from: [image/png, image/jpeg]
+        to: [image/svg+xml]
+        lossless: false
+        priority: 60
+        command: "vtracer --input {input} --output {output}"
+
+  - engine: exiftool
+    binary: exiftool
+    package: perl-image-exiftool
+    description: Read/write/strip metadata across hundreds of formats
+    categories: [metadata]
+    note: metadata operations, not format conversion — adapter pending (Phase 2)
+    probe: {args: [-ver], version_regex: '([^\s]+)'}
