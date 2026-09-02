@@ -1,8 +1,9 @@
-"""Cirax CLI — doctor, formats, detect, plan, convert."""
+"""Cirax CLI — doctor, formats, detect, plan, presets, convert, watch."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -64,6 +65,8 @@ def cmd_doctor(args) -> int:
     print(f"\nEngines: {len(installed)}/{len(reg.engines)} installed · "
           f"formats: {len(reg.formats)}")
     print(f"Hardware video encoders: {', '.join(hw) if hw else 'none detected'}")
+    from .sandbox import bwrap_available
+    print(f"Sandbox: {'bwrap ready' if bwrap_available() else 'bwrap missing'}")
 
     missing = [e for e in reg.engines if not e.installed and e.package]
     if missing and args.show_missing:
@@ -212,7 +215,8 @@ def _convert_one(reg, args, src_path: Path, dst_path: Path) -> int:
         return 0
     try:
         execute(plan, reg, src_path, dst_path, quiet=args.quiet,
-                preset=args.preset, pages=getattr(args, "pages", "first"))
+                preset=args.preset, pages=getattr(args, "pages", "first"),
+                sandbox=getattr(args, "sandbox", "auto"))
     except ConversionError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 3
@@ -267,6 +271,72 @@ def cmd_convert(args) -> int:
     return status
 
 
+def cmd_watch(args) -> int:
+    """Watch a folder and convert new files as they appear."""
+    import time as _time
+
+    from .executor import ConversionError, execute
+
+    reg = load()
+    probe_all(reg)
+    watch_dir = Path(args.dir).expanduser().resolve()
+    if not watch_dir.is_dir():
+        print(f"error: {watch_dir} is not a directory", file=sys.stderr)
+        return 1
+    out_dir = Path(args.out).expanduser().resolve() if args.out else watch_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+    target_ext = args.to.lstrip(".").lower()
+    dst_mime = reg.ext_to_mime.get(target_ext)
+    if not dst_mime:
+        print(f"error: unknown target extension '{target_ext}'", file=sys.stderr)
+        return 1
+    state_file = watch_dir / ".cirax-watch.json"
+    done: dict[str, float] = {}
+    if state_file.exists():
+        try:
+            done = json.loads(state_file.read_text())
+        except (OSError, ValueError):
+            done = {}
+
+    print(f"watching {watch_dir} -> .{target_ext} in {out_dir} "
+          f"(Ctrl-C to stop)")
+    try:
+        while True:
+            for f in sorted(watch_dir.iterdir()):
+                if not f.is_file() or f.name.startswith("."):
+                    continue
+                if f.suffix.lower().lstrip(".") == target_ext:
+                    continue
+                mtime = f.stat().st_mtime
+                if done.get(f.name) == mtime:
+                    continue
+                if f.name in done:
+                    continue  # failed/skipped files aren't retried
+                mime, _ = detect(f, reg.ext_to_mime)
+                plan = find_plan(reg, mime, dst_mime)
+                if plan is None:
+                    done[f.name] = mtime  # not convertible; don't nag
+                    print(f"skip {f.name} ({mime}: no route to {dst_mime})")
+                    continue
+                dst = out_dir / (f.stem + "." + target_ext)
+                print(f"converting {f.name} -> {dst.name} "
+                      f"({' -> '.join(plan.engines)})")
+                try:
+                    execute(plan, reg, f, dst, quiet=True,
+                            sandbox=getattr(args, "sandbox", "auto"))
+                    done[f.name] = mtime
+                    print(f"done: {dst.name}")
+                except ConversionError as exc:
+                    done[f.name] = mtime  # don't retry broken files
+                    print(f"error converting {f.name}: {exc}", file=sys.stderr)
+                state_file.write_text(json.dumps(done, indent=1))
+            _time.sleep(max(args.interval, 0.5))
+    except KeyboardInterrupt:
+        state_file.write_text(json.dumps(done, indent=1))
+        print("\nstopped")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="cirax",
@@ -301,6 +371,8 @@ def build_parser() -> argparse.ArgumentParser:
     c.add_argument("-P", "--preset", help="engine preset (see: cirax presets)")
     c.add_argument("--engine", help="force a specific engine (e.g. iconv vs "
                                     "dos2unix, tesseract vs glm-ocr)")
+    c.add_argument("--sandbox", choices=["auto", "on", "off"], default="auto",
+                   help="bwrap sandbox: auto (default), on, off")
     c.add_argument("--pages", default="first", metavar="N|M-K|all",
                    help="for pdf->image routes: first (default), all, "
                         "a page number, or a range")
@@ -311,6 +383,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     pr = sub.add_parser("presets", help="list available engine presets")
     pr.set_defaults(func=cmd_presets)
+
+    w = sub.add_parser("watch", help="watch a folder, convert new files automatically")
+    w.add_argument("dir", help="folder to watch")
+    w.add_argument("-t", "--to", required=True, help="target extension")
+    w.add_argument("--out", help="output folder (default: same folder)")
+    w.add_argument("--interval", type=float, default=2.0,
+                   help="poll interval seconds (default 2)")
+    w.add_argument("--sandbox", choices=["auto", "on", "off"], default="auto")
+    w.set_defaults(func=cmd_watch)
     return p
 
 

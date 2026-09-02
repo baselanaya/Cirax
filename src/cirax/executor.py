@@ -19,6 +19,7 @@ from pathlib import Path
 
 from .registry import Registry, TREE_FMT
 from .router import Plan, Step
+from .sandbox import bwrap_argv, resolve_mode
 
 FLAG_VARS = {"flags", "input_flags", "output_flags"}
 _PLACEHOLDER = re.compile(r"\{(\w+)\}")
@@ -83,7 +84,7 @@ def apply_preset(step: Step, preset: str | None) -> Step:
 
 def _builtin(name: str, *, src: Path, dst: Path, outdir: Path, to_fmt: str,
              ext_for, pages: tuple[int, int | None], pattern: Path,
-             printf: Path) -> str | None:
+             printf: Path, workdir: Path) -> str | None:
     if name == "input":
         return str(src)
     if name == "output":
@@ -102,12 +103,14 @@ def _builtin(name: str, *, src: Path, dst: Path, outdir: Path, to_fmt: str,
         return str(pages[0])
     if name == "last_page":
         return str(pages[1] if pages[1] else 9999999)
+    if name == "workdir":
+        return str(workdir)
     return None
 
 
 def render_args(step: Step, *, src: Path, dst: Path, outdir: Path,
                 ext_for, pages: tuple[int, int | None] = (1, None),
-                multipage: bool = False) -> list[str]:
+                multipage: bool = False, workdir: Path | None = None) -> list[str]:
     """Turn a command template into an argv list.
 
     Templates are tokenized first, then placeholders are substituted per
@@ -124,6 +127,7 @@ def render_args(step: Step, *, src: Path, dst: Path, outdir: Path,
     stem = dst.with_suffix("").name
     pattern = outdir / stem  # e.g. outdir/page  -> page-1.png, page-2.png
     printf = outdir / f"{stem}-%02d"  # printf-style for gs -sOutputFile
+    workdir = workdir if workdir is not None else outdir.parent
 
     tokens = shlex.split(template or "")
     argv: list[str] = []
@@ -140,7 +144,7 @@ def render_args(step: Step, *, src: Path, dst: Path, outdir: Path,
         for name in names:
             builtin = _builtin(name, src=src, dst=dst, outdir=outdir,
                                to_fmt=to_fmt, ext_for=ext_for, pages=pages,
-                               pattern=pattern, printf=printf)
+                               pattern=pattern, printf=printf, workdir=workdir)
             if builtin is None:
                 value = route.var_for(name, to_fmt=to_fmt, from_fmt=None)
                 if value is not None:
@@ -234,9 +238,13 @@ def _parse_pages(pages: str) -> tuple[int, int | None]:
 
 def execute(plan: Plan, reg: Registry, src_path: Path, dst_path: Path,
             workdir: Path | None = None, quiet: bool = False,
-            preset: str | None = None, pages: str = "first") -> list[StepResult]:
+            preset: str | None = None, pages: str = "first",
+            sandbox: str = "auto") -> list[StepResult]:
     """Run every step of the plan. Intermediates live in workdir; the final
-    step writes dst_path directly. Returns per-step results for logging."""
+    step writes dst_path directly. Returns per-step results for logging.
+
+    sandbox: "auto" (sandbox when bwrap is present and the engine allows),
+    "on" (require sandbox), "off" (never sandbox)."""
     src_path = src_path.resolve()
     dst_path = dst_path.resolve()
     if not plan.steps:
@@ -272,7 +280,15 @@ def execute(plan: Plan, reg: Registry, src_path: Path, dst_path: Path,
             outdir.mkdir(parents=True, exist_ok=True)
             argv = render_args(step, src=current, dst=out, outdir=outdir,
                                ext_for=reg.ext_for, pages=page_range,
-                               multipage=do_multipage)
+                               multipage=do_multipage, workdir=workdir)
+            try:
+                sb_mode = resolve_mode(sandbox, step.engine.sandbox)
+            except RuntimeError as exc:
+                raise ConversionError(str(exc))
+            if sb_mode == "on" and not quiet and i == 0:
+                print("  sandbox: bwrap (no network, read-only fs)")
+            if sb_mode == "on":
+                argv = bwrap_argv(argv, src=current, dst=out, workdir=workdir)
             cwd = current if (step.route.cwd == "input" and
                               current.is_dir()) else None
             if not quiet:

@@ -76,6 +76,7 @@ class Engine:
     # the engine needs one-time setup (e.g. pulling a model)
     routes: list[Route] = field(default_factory=list)
     presets: dict[str, dict[str, object]] = field(default_factory=dict)
+    sandbox: str = "default"  # "default" | "none" (needs local daemon/net)
     # filled in by the prober:
     installed: bool = False
     path: str | None = None
@@ -150,6 +151,7 @@ def _build_engine(d: dict) -> Engine:
         setup_hint=d.get("setup_hint"),
         routes=[_build_route(r) for r in d.get("routes", [])],
         presets=dict(d.get("presets", {})),
+        sandbox=d.get("sandbox", "default"),
     )
 
 

@@ -30,10 +30,10 @@ printf 'hello cirax\nsecond line\n' > doc.txt
 printf '%%!PS\n/Helvetica findfont 24 scalefont setfont 72 720 moveto (Hello Cirax) show showpage 72 700 moveto (Page Two) show showpage\n' > doc.ps
 
 echo "== doctor / plan =="
-"$CIRAX" doctor >/dev/null && echo "  ok  doctor exits 0"
-"$CIRAX" plan sample.png webp | grep -q "route" && echo "  ok  plan prints a route"
-"$CIRAX" convert doc.txt -t zst -n >/dev/null && echo "  ok  dry-run"
-"$CIRAX" presets >/dev/null && echo "  ok  presets listing"
+"$CIRAX" doctor >/dev/null && { pass=$((pass+1)); echo "  ok  doctor exits 0"; } || { fail=$((fail+1)); echo "FAIL  doctor"; }
+"$CIRAX" plan sample.png webp | grep -q "route" && { pass=$((pass+1)); echo "  ok  plan prints a route"; } || { fail=$((fail+1)); echo "FAIL  plan"; }
+"$CIRAX" convert doc.txt -t zst -n >/dev/null && { pass=$((pass+1)); echo "  ok  dry-run"; } || { fail=$((fail+1)); echo "FAIL  dry-run"; }
+"$CIRAX" presets >/dev/null && { pass=$((pass+1)); echo "  ok  presets listing"; } || { fail=$((fail+1)); echo "FAIL  presets"; }
 
 echo "== single-hop =="
 "$CIRAX" convert -q sample.png -t webp;    check "png->webp"  sample.webp image/webp
@@ -101,6 +101,46 @@ if ollama list 2>/dev/null | grep -q glm-ocr; then
   fi
 else
   echo "skip  GLM-OCR (model not pulled; run: ollama pull glm-ocr)"
+fi
+
+echo "== phase 3: sandbox / 3D / disks / geo =="
+if "$CIRAX" convert -q sample.png sb.webp --sandbox on && bwrap --ro-bind / / --tmpfs /tmp --unshare-net -- true 2>/dev/null; then
+  pass=$((pass+1)); echo "  ok  sandboxed conversion (bwrap, no network)"
+else
+  fail=$((fail+1)); echo "FAIL  sandboxed conversion"
+fi
+cat > cube.obj <<'EOF'
+v 0 0 0
+v 1 0 0
+v 1 1 0
+v 0 1 0
+v 0 0 1
+v 1 0 1
+v 1 1 1
+v 0 1 1
+f 1 2 3 4
+f 5 6 7 8
+f 1 2 6 5
+f 2 3 7 6
+f 3 4 8 7
+f 4 1 5 8
+EOF
+if "$CIRAX" convert -q cube.obj cube.glb && file -b cube.glb | grep -qi glTF; then
+  pass=$((pass+1)); echo "  ok  obj->glb (assimp)"
+else
+  fail=$((fail+1)); echo "FAIL  obj->glb"
+fi
+qemu-img create -f qcow2 disk.qcow2 16M >/dev/null
+if "$CIRAX" convert -q disk.qcow2 disk.vdi && qemu-img info disk.vdi 2>/dev/null | grep -q vdi; then
+  pass=$((pass+1)); echo "  ok  qcow2->vdi (qemu-img)"
+else
+  fail=$((fail+1)); echo "FAIL  qcow2->vdi"
+fi
+printf '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"name":"home"},"geometry":{"type":"Point","coordinates":[12.5,51.3]}}]}' > pt.geojson
+if "$CIRAX" convert -q pt.geojson pt.gpkg && file -b pt.gpkg | grep -qi GeoPackage; then
+  pass=$((pass+1)); echo "  ok  geojson->gpkg (gdal)"
+else
+  fail=$((fail+1)); echo "FAIL  geojson->gpkg"
 fi
 
 echo

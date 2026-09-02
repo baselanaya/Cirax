@@ -20,7 +20,7 @@ engines:
         lossless: false
         priority: 88
         output_mode: outdir
-        command: "soffice --headless --norestore --convert-to {output_ext} --outdir {outdir} {input}"
+        command: "soffice --headless --norestore -env:UserInstallation=file://{workdir}/lo --convert-to {output_ext} --outdir {outdir} {input}"
       - from: [application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,
                application/vnd.ms-excel, application/vnd.oasis.opendocument.spreadsheet,
                text/csv, text/tab-separated-values]
@@ -30,7 +30,7 @@ engines:
         lossless: false
         priority: 88
         output_mode: outdir
-        command: "soffice --headless --norestore --convert-to {output_ext} --outdir {outdir} {input}"
+        command: "soffice --headless --norestore -env:UserInstallation=file://{workdir}/lo --convert-to {output_ext} --outdir {outdir} {input}"
       - from: [application/vnd.openxmlformats-officedocument.presentationml.presentation,
                application/vnd.ms-powerpoint,
                application/vnd.oasis.opendocument.presentation]
@@ -38,7 +38,7 @@ engines:
         lossless: false
         priority: 88
         output_mode: outdir
-        command: "soffice --headless --norestore --convert-to {output_ext} --outdir {outdir} {input}"
+        command: "soffice --headless --norestore -env:UserInstallation=file://{workdir}/lo --convert-to {output_ext} --outdir {outdir} {input}"
 
   - engine: pandoc
     binary: pandoc
