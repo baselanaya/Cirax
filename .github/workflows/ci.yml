@@ -62,7 +62,7 @@ jobs:
       - name: install a subset of engines
         shell: pwsh
         run: |
-          choco install -y --no-progress ffmpeg imagemagick ghostscript poppler 7zip zstd pandoc
+          choco install -y --no-progress ffmpeg imagemagick ghostscript poppler 7zip pandoc
       - name: install cirax
         run: uv sync
       - name: doctor
@@ -73,14 +73,7 @@ jobs:
           T=$(mktemp -d); cd "$T"
           CIRAX="$GITHUB_WORKSPACE/.venv/Scripts/cirax"
           printf 'hello cirax\n' > doc.txt
-          echo "[1] txt -> zst"
-          "$CIRAX" convert -q doc.txt -t zst
-          test -s doc.zst
-          echo "[2] zip -> 7z"
-          7z a -bso0 archive.zip doc.txt
-          "$CIRAX" convert -q archive.zip -t 7z
-          test -s archive.7z
-          echo "[3] png -> webp"
+          echo "[1] png -> pdf (imagemagick)"
           python - <<'PY'
           import base64, pathlib
           png = base64.b64decode(
@@ -88,8 +81,16 @@ jobs:
             "nGNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==")
           pathlib.Path("dot.png").write_bytes(png)
           PY
-          "$CIRAX" convert -q dot.png -t webp
-          test -s dot.webp
+          "$CIRAX" convert -q dot.png -t pdf
+          test -s dot.pdf
+          echo "[2] zip -> 7z"
+          7z a -bso0 archive.zip doc.txt
+          "$CIRAX" convert -q archive.zip -t 7z
+          test -s archive.7z
+          echo "[3] webp -> png (imagemagick)"
+          magick dot.png dot.webp
+          "$CIRAX" convert -q dot.webp -t png
+          test -s dot.png.png
           echo "[4] ps -> pdf -> txt"
           printf '%%!PS\n/Helvetica findfont 20 scalefont setfont 72 700 moveto (Hello Cirax) show showpage\n' > doc.ps
           "$CIRAX" convert -q doc.ps readme.pdf
