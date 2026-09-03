@@ -5,6 +5,7 @@ engines:
   - engine: qpdf
     binary: qpdf
     package: qpdf
+    install_macos: "brew install qpdf"
     install_windows: "scoop install qpdf"
     description: Lossless PDF surgery — merge, split, linearize, repair
     categories: [document]
@@ -20,6 +21,7 @@ engines:
   - engine: ghostscript
     binary: gs
     package: ghostscript
+    install_macos: "brew install ghostscript"
     search_windows:
       - "%ProgramFiles%/gs/gs*/bin/gswin64c.exe"
     install_windows: "scoop install ghostscript"
@@ -64,6 +66,7 @@ engines:
   - engine: pdftotext
     binary: pdftotext
     package: poppler
+    install_macos: "brew install poppler"
     install_windows: "scoop install poppler"
     description: PDF text extraction (Poppler)
     categories: [document]
@@ -78,6 +81,7 @@ engines:
   - engine: pdftoppm
     binary: pdftoppm
     package: poppler
+    install_macos: "brew install poppler"
     install_windows: "scoop install poppler"
     description: PDF rasterizer (Poppler)
     categories: [document, image]
@@ -99,6 +103,7 @@ engines:
   - engine: pdftocairo
     binary: pdftocairo
     package: poppler
+    install_macos: "brew install poppler"
     install_windows: "scoop install poppler"
     description: PDF to PNG/JPEG/SVG via cairo (Poppler)
     categories: [document, image]
@@ -128,6 +133,7 @@ engines:
   - engine: img2pdf
     binary: img2pdf
     package: img2pdf
+    install_macos: "pip install img2pdf"
     install_windows: "pip install img2pdf"
     description: Lossless image-to-PDF (embeds, never recompresses)
     categories: [image, document]
@@ -142,6 +148,7 @@ engines:
   - engine: ocrmypdf
     binary: ocrmypdf
     package: ocrmypdf
+    install_macos: "pip install ocrmypdf"
     install_windows: "pip install ocrmypdf"
     description: Add an OCR text layer to scanned PDFs
     categories: [document]
@@ -157,6 +164,7 @@ engines:
   - engine: tesseract
     binary: tesseract
     package: tesseract tesseract-data-eng
+    install_macos: "brew install tesseract"
     install_windows: "scoop install tesseract"
     description: OCR — images to text or searchable PDF
     categories: [image, document]

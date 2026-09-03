@@ -28,6 +28,8 @@ def engine_binary(engine: Engine) -> str:
     """
     if sys.platform == "win32" and engine.binaries_windows:
         return engine.binaries_windows
+    if sys.platform == "darwin" and engine.binaries_macos:
+        return engine.binaries_macos
     return engine.binary
 
 
@@ -40,6 +42,25 @@ def _expand_windows(pattern: str) -> str:
                   .replace("%ProgramFiles%", pf)
                   .replace("%LOCALAPPDATA%", lap))
     return os.path.expandvars(out)
+
+
+def _search_macos(engine: Engine) -> str | None:
+    """Look in /Applications for cask-installed engines (LibreOffice,
+    Calibre, darktable, Inkscape) whose CLIs never land on PATH."""
+    binary = engine_binary(engine)
+    for pattern in engine.search_macos:
+        matches = sorted(glob.glob(pattern), reverse=True)
+        if matches:
+            return matches[0]
+        d = os.path.dirname(_expand(pattern))
+        cand = os.path.join(d, binary)
+        if os.path.isfile(cand):
+            return cand
+    return None
+
+
+def _expand(pattern: str) -> str:
+    return pattern
 
 
 def _search_windows(engine: Engine) -> str | None:
@@ -70,6 +91,8 @@ def probe_engine(engine: Engine, timeout: int = 15) -> None:
     """Fill in installed/path/version for one engine (in place)."""
     binary = engine_binary(engine)
     path = shutil.which(binary)
+    if not path and sys.platform == "darwin":
+        path = _search_macos(engine)
     if not path and sys.platform == "win32":
         path = _search_windows(engine)
     if not path:

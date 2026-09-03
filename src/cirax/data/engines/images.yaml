@@ -32,6 +32,7 @@ engines:
   - engine: imagemagick
     binary: magick
     package: imagemagick
+    install_macos: "brew install imagemagick"
     search_windows:
       - "%ProgramFiles%/ImageMagick*/magick.exe"
     install_windows: "scoop install imagemagick"
@@ -149,6 +150,7 @@ engines:
   - engine: oxipng
     binary: oxipng
     package: oxipng
+    install_macos: "brew install oxipng"
     install_windows: "scoop install oxipng"
     description: Lossless PNG optimizer
     categories: [image]
@@ -163,6 +165,7 @@ engines:
   - engine: pngquant
     binary: pngquant
     package: pngquant
+    install_macos: "brew install pngquant"
     install_windows: "scoop install pngquant"
     description: Palette-quantizing PNG compressor (lossy, dramatic savings)
     categories: [image]
@@ -177,6 +180,9 @@ engines:
   - engine: darktable-cli
     binary: darktable-cli
     package: darktable
+    install_macos: "brew install --cask darktable"
+    search_macos:
+      - "/Applications/darktable.app/Contents/MacOS/darktable-cli"
     search_windows:
       - "%ProgramFiles%/darktable/bin/darktable-cli.exe"
     install_windows: "scoop install darktable"
@@ -209,6 +215,7 @@ engines:
   - engine: inkscape
     binary: inkscape
     package: inkscape
+    install_macos: "brew install --cask inkscape"
     search_windows:
       - "%ProgramFiles%/Inkscape/bin/inkscape.exe"
     install_windows: "scoop install inkscape"
@@ -242,6 +249,7 @@ engines:
   - engine: potrace
     binary: potrace
     package: potrace
+    install_macos: "brew install potrace"
     install_windows: "scoop install potrace"
     description: Bitmap-to-vector tracer (monochrome)
     categories: [image]
@@ -271,6 +279,7 @@ engines:
   - engine: exiftool
     binary: exiftool
     package: perl-image-exiftool
+    install_macos: "brew install exiftool"
     install_windows: "scoop install exiftool"
     description: Read/write/strip metadata across hundreds of formats
     categories: [metadata]

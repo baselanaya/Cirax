@@ -155,8 +155,12 @@ class Engine:
     categories: list[str] = field(default_factory=list)
     probe_args: list[str] = field(default_factory=list)
     version_regex: str = ""
-    package: str | None = None
+    package: str | None = None  # Arch pacman hint (Linux doctor)
     install_linux: str | None = None  # non-pacman hint (binary release, pip)
+    install_macos: str | None = None  # brew/cask hint for macOS
+    binaries_macos: str | None = None  # macOS binary alias (e.g. 7zz)
+    search_macos: list[str] = field(default_factory=list)
+    # absolute file patterns under /Applications for PATH-less cask installs
     note: str | None = None
     setup_hint: str | None = None  # shown by doctor when binary present but
     # the engine needs one-time setup (e.g. pulling a model)
@@ -240,6 +244,9 @@ def _build_engine(d: dict) -> Engine:
         version_regex=probe.get("version_regex", ""),
         package=d.get("package"),
         install_linux=d.get("install_linux"),
+        install_macos=d.get("install_macos"),
+        binaries_macos=d.get("binaries_macos"),
+        search_macos=list(d.get("search_macos", [])),
         note=d.get("note"),
         setup_hint=d.get("setup_hint"),
         routes=[_build_route(r) for r in d.get("routes", [])],

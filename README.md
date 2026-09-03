@@ -77,6 +77,7 @@ $ cirax convert scan.png text.txt
 | npm | `npm i -g @baselanaya/cirax` |
 | Windows | `Cirax-Setup-win64.exe` from [Releases](https://github.com/baselanaya/Cirax/releases) (desktop app + CLI). Engines: `cirax doctor --show-missing` prints scoop/winget commands; extra engines in `scoop bucket add cirax https://github.com/baselanaya/Cirax` |
 | Desktop (Linux) | grab the `.deb` / `.rpm` / `.AppImage` from [Releases](https://github.com/baselanaya/Cirax/releases) |
+| macOS | `Cirax-macos.dmg` from [Releases](https://github.com/baselanaya/Cirax/releases) (experimental — unsigned, right-click → Open) |
 
 Cirax itself is tiny — the engines are your system packages. `cirax doctor
 --show-missing` prints exactly what to install.

@@ -51,6 +51,50 @@ jobs:
           grep -qi cirax readme.txt
           echo "ci conversions ok"
 
+  test-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: install a subset of engines
+        run: |
+          brew install vips sevenzip ghostscript poppler
+      - name: install cirax
+        run: uv sync
+      - name: doctor
+        run: uv run cirax doctor
+      - name: conversion checks
+        run: |
+          set -e
+          T=$(mktemp -d); cd "$T"
+          CIRAX="$GITHUB_WORKSPACE/.venv/bin/cirax"
+          printf 'hello cirax\n' > doc.txt
+          echo "[1] png -> webp (vips)"
+          python3 - <<'PY'
+          import struct, zlib, pathlib
+          def chunk(t, data):
+              c = t + data
+              return struct.pack(">I", len(data)) + c + struct.pack(">I", zlib.crc32(c) & 0xffffffff)
+          png = (b"\x89PNG\r\n\x1a\n"
+                 + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+                 + chunk(b"IDAT", zlib.compress(b"\x00\xff\x00\xff\xff"))
+                 + chunk(b"IEND", b""))
+          pathlib.Path("dot.png").write_bytes(png)
+          PY
+          "$CIRAX" convert -q dot.png -t webp
+          test -s dot.webp
+          echo "[2] zip -> 7z (7zz)"
+          7zz a -bso0 archive.zip doc.txt
+          "$CIRAX" convert -q archive.zip -t 7z
+          test -s archive.7z
+          echo "[3] ps -> pdf -> txt (ghostscript + poppler)"
+          printf '%%!PS\n/Helvetica findfont 20 scalefont setfont 72 700 moveto (Hello Cirax) show showpage\n' > doc.ps
+          "$CIRAX" convert -q doc.ps readme.pdf
+          test -s readme.pdf
+          "$CIRAX" convert -q readme.pdf -t txt
+          grep -qi cirax readme.txt
+          echo "macos conversions ok"
+
   test-windows:
     runs-on: windows-latest
     defaults:

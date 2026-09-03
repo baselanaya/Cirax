@@ -4,6 +4,7 @@ engines:
   - engine: yq
     binary: yq
     package: go-yq
+    install_macos: "brew install yq"
     install_windows: "scoop install yq"
     description: Polyglot data converter — JSON/YAML/XML/CSV/TSV/properties
     categories: [data]
@@ -33,6 +34,7 @@ engines:
   - engine: miller
     binary: mlr
     package: miller
+    install_macos: "brew install miller"
     install_windows: "scoop install miller"
     description: Record-format converter and processor (CSV/TSV/JSON/JSONL)
     categories: [data]
@@ -60,6 +62,7 @@ engines:
   - engine: duckdb
     binary: duckdb
     package: duckdb
+    install_macos: "brew install duckdb"
     install_windows: "scoop install duckdb"
     description: Tabular Swiss knife — CSV/Parquet/JSON interconvert via SQL
     categories: [data, spreadsheet]
@@ -92,6 +95,7 @@ engines:
   - engine: jq
     binary: jq
     package: jq
+    install_macos: "brew install jq"
     install_windows: "scoop install jq"
     description: JSON processor (pretty-print/minify routes here)
     categories: [data]
@@ -132,6 +136,7 @@ engines:
   - engine: dos2unix
     binary: dos2unix
     package: dos2unix
+    install_macos: "brew install dos2unix"
     install_windows: "scoop install dos2unix"
     description: Line-ending converter
     categories: [data]

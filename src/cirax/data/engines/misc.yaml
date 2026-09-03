@@ -4,6 +4,7 @@ engines:
   - engine: qemu-img
     binary: qemu-img
     package: qemu-img
+    install_macos: "brew install qemu"
     install_windows: "scoop install qemu"
     description: VM disk image converter (qcow2/vdi/vmdk/vhd/vhdx/raw)
     categories: [disk]
@@ -71,6 +72,7 @@ engines:
   - engine: fonttools
     binary: fonttools
     package: python-fonttools
+    install_macos: "pip install fonttools"
     install_windows: "pip install fonttools"
     description: Font converter — TTF/OTF/WOFF/WOFF2
     categories: [font]

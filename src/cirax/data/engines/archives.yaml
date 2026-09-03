@@ -44,6 +44,7 @@ engines:
   - engine: zstd
     binary: zstd
     package: zstd
+    install_macos: "brew install zstd"
     install_windows: "scoop install zstd"
     description: Zstandard single-file compression (any input)
     categories: [compression]

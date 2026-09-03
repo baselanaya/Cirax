@@ -72,16 +72,19 @@ def cmd_doctor(args) -> int:
     else:
         print("Sandbox: unavailable on this platform (Linux-only)")
 
-    is_windows = sys.platform == "win32"
-    missing = [e for e in reg.engines if not e.installed and
-               (e.install_windows if is_windows else e.package)]
+    def platform_hint(e):
+        if sys.platform == "win32":
+            return e.install_windows
+        if sys.platform == "darwin":
+            return e.install_macos or e.install_windows
+        return e.package or e.install_linux
+
+    missing = [e for e in reg.engines if not e.installed and platform_hint(e)]
     if missing and args.show_missing:
-        print("\nMissing engines"
-              + (" (install hints):" if is_windows else
-                 " (Arch package hints):"))
+        label = {False: "install hints", True: "Arch package hints"}.get(False)
+        print("\nMissing engines:")
         for e in missing:
-            hint = e.install_windows if is_windows else e.package
-            print(f"  {hint}   # {e.name} ({e.binary})")
+            print(f"  {platform_hint(e)}   # {e.name} ({e.binary})")
 
     unsetup = [e for e in reg.engines
                if e.installed and e.setup_hint and not e.version]

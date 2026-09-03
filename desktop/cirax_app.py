@@ -209,6 +209,8 @@ def open_path(path: Path) -> None:
            if k not in ("LD_LIBRARY_PATH", "PYTHONPATH", "PYTHONHOME")}
     if sys.platform == "win32":
         os.startfile(str(path))  # noqa: S606
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open", str(path)], env=env)
     elif shutil.which("xdg-open"):
         subprocess.Popen(["xdg-open", str(path)], env=env,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

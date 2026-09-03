@@ -4,6 +4,9 @@ engines:
   - engine: libreoffice
     binary: soffice
     package: libreoffice-still
+    install_macos: "brew install --cask libreoffice"
+    search_macos:
+      - "/Applications/LibreOffice.app/Contents/MacOS/soffice"
     search_windows:
       - "%ProgramFiles%/LibreOffice/program/soffice.exe"
       - "%ProgramFiles(x86)%/LibreOffice/program/soffice.exe"
@@ -47,6 +50,7 @@ engines:
   - engine: pandoc
     binary: pandoc
     package: pandoc
+    install_macos: "brew install pandoc"
     install_windows: "scoop install pandoc"
     description: Universal markup converter
     categories: [document]
@@ -67,6 +71,9 @@ engines:
   - engine: calibre
     binary: ebook-convert
     package: calibre
+    install_macos: "brew install --cask calibre"
+    search_macos:
+      - "/Applications/calibre.app/Contents/MacOS/ebook-convert"
     search_windows:
       - "%ProgramFiles%/Calibre2/ebook-convert.exe"
       - "%LOCALAPPDATA%/Programs/Calibre2/ebook-convert.exe"
@@ -91,6 +98,7 @@ engines:
   - engine: weasyprint
     binary: weasyprint
     package: python-weasyprint
+    install_macos: "pip install weasyprint"
     install_windows: "pip install weasyprint"
     description: Print-grade HTML to PDF (CSS paged media)
     categories: [document]
@@ -105,6 +113,7 @@ engines:
   - engine: typst
     binary: typst
     package: typst
+    install_macos: "brew install typst"
     install_windows: "scoop install typst"
     description: Modern typesetting — Typst to PDF/PNG
     categories: [document]

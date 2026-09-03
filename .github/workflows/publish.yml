@@ -105,6 +105,24 @@ jobs:
             dist/packages/Cirax-Setup-*-win64.exe
             dist/packages/cirax-*-win64-portable.zip
 
+  macos:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-latest
+    permissions:
+      contents: write  # attach artifacts to the release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: build .app + .dmg + CLI
+        run: ./packaging/macos/build_macos.sh
+      - name: attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/packages/Cirax-*-macos-*.dmg
+            dist/packages/cirax-*-macos-cli.zip
+
+  npm:
   npm:
     if: github.event_name == 'workflow_dispatch' && inputs.npm == true
     runs-on: ubuntu-latest

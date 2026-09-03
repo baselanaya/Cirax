@@ -4,6 +4,7 @@ engines:
   - engine: ffmpeg
     binary: ffmpeg
     package: ffmpeg
+    install_macos: "brew install ffmpeg"
     install_windows: "scoop install ffmpeg"
     description: Universal audio/video transcoder — the spine of the A/V domain
     categories: [video, audio, subtitle]
@@ -105,6 +106,7 @@ engines:
   - engine: mkvmerge
     binary: mkvmerge
     package: mkvtoolnix-cli
+    install_macos: "brew install mkvtoolnix"
     search_windows:
       - "%ProgramFiles%/MKVToolNix/mkvmerge.exe"
     install_windows: "scoop install mkvtoolnix"
@@ -118,6 +120,7 @@ engines:
   - engine: sox
     binary: sox
     package: sox
+    install_macos: "brew install sox"
     install_windows: "scoop install sox"
     description: Audio DSP — resample, dither, channels, effects
     categories: [audio]
@@ -135,6 +138,7 @@ engines:
   - engine: lame
     binary: lame
     package: lame
+    install_macos: "brew install lame"
     install_windows: "scoop install lame"
     description: Reference MP3 encoder
     categories: [audio]
@@ -151,6 +155,7 @@ engines:
   - engine: flac
     binary: flac
     package: flac
+    install_macos: "brew install flac"
     install_windows: "scoop install flac"
     description: Reference FLAC encoder/decoder
     categories: [audio]
@@ -172,6 +177,7 @@ engines:
   - engine: opusenc
     binary: opusenc
     package: opus-tools
+    install_macos: "brew install opus-tools"
     install_windows: "scoop install opus-tools"
     description: Reference Opus encoder
     categories: [audio]
@@ -188,6 +194,7 @@ engines:
   - engine: gifsicle
     binary: gifsicle
     package: gifsicle
+    install_macos: "brew install gifsicle"
     install_windows: "scoop install gifsicle"
     description: GIF optimizer and frame surgery
     categories: [image, video]

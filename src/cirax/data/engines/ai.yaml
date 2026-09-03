@@ -9,6 +9,7 @@ engines:
   - engine: glm-ocr
     binary: ollama
     package: ollama ollama-cuda
+    install_macos: "brew install ollama"
     install_windows: "winget install Ollama.Ollama"
     description: "GLM-OCR vision model (zai-org, MIT) — state-of-the-art local OCR via Ollama"
     categories: [image, document, ai]
@@ -46,6 +47,7 @@ engines:
   - engine: whisper
     binary: ollama
     package: ollama ollama-cuda
+    install_macos: "brew install ollama"
     install_windows: "winget install Ollama.Ollama"
     description: Offline speech-to-text (audio/video to SRT/VTT/TXT)
     categories: [audio, subtitle, ai]
