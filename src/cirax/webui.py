@@ -12,9 +12,9 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import sys
 import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from importlib.resources import files
 from pathlib import Path
 
 from cirax.detect import detect
@@ -22,8 +22,30 @@ from cirax.executor import ConversionError, execute
 from cirax.probe import probe_all
 from cirax.router import find_plan
 
-_PAGE = (files("cirax") / "data" / "web" / "index.html").read_text()
 _MAX_BODY = 1024 * 1024 * 1024  # 1 GiB hard cap
+
+_FALLBACK_PAGE = """<!doctype html><html><head><meta charset="utf-8">
+<title>Cirax</title></head><body style="font-family:sans-serif;background:#0d1118;color:#dbe4ec">
+<h1>● Cirax</h1><p>serve is running, but the web UI assets failed to load in this
+bundle. The CLI and the JSON API still work: POST /api/convert?to=&lt;ext&gt;.</p>
+</body></html>"""
+
+
+def _load_page() -> str:
+    """Find the web UI page across dev, frozen onedir, and add-data layouts."""
+    me = Path(__file__).resolve().parent / "data" / "web" / "index.html"
+    cands = [me]
+    if hasattr(sys, "_MEIPASS"):
+        base = Path(sys._MEIPASS)  # type: ignore[attr-defined]
+        cands += [base / "cirax" / "data" / "web" / "index.html",
+                  base / "data" / "web" / "index.html"]
+    for cand in cands:
+        if cand.exists():
+            return cand.read_text()
+    return _FALLBACK_PAGE
+
+
+_PAGE = _load_page()
 
 
 def parse_multipart(body: bytes, boundary: str) -> dict[str, tuple[str | None, bytes]]:

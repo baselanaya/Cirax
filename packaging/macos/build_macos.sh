@@ -19,6 +19,7 @@ uv run pyinstaller --onefile --name cirax --clean --noconfirm \
   desktop/cirax_cli_entry.py >/dev/null
 uv run pyinstaller --onedir --windowed --name cirax-app --clean --noconfirm \
   --paths src --add-data "src/cirax/data:data" \
+  --add-data "src/cirax/data/web:data/web" \
   desktop/cirax_app_entry.py >/dev/null
 
 # 2. icon (png -> icns via built-ins)

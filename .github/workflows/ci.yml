@@ -171,7 +171,8 @@ jobs:
       - name: build desktop app (onedir)
         run: |
           uv run pyinstaller --onedir --windowed --name cirax-app --clean --noconfirm \
-            --paths src --add-data "src/cirax/data:data" desktop/cirax_app_entry.py
+            --paths src --add-data "src/cirax/data:data" \
+            --add-data "src/cirax/data/web:data/web" desktop/cirax_app_entry.py
       - name: frozen app smoke (constructs every page)
         run: |
           QT_QPA_PLATFORM=offscreen CIRAX_SMOKE=1 dist/cirax-app/cirax-app

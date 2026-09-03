@@ -1,6 +1,6 @@
 {
   "name": "@baselanaya/cirax",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "description": "Universal local conversion hub \u2014 every format to every format, fully offline. npm wrapper that installs the Python core.",
   "license": "MIT",
   "repository": {
