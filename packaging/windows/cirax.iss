@@ -1,8 +1,8 @@
 ; Cirax Windows installer (Inno Setup 6)
 ; Build:  iscc /DAPPVER=0.6.0 packaging\windows\cirax.iss
+; (/DAPPVER is required — CI always passes it)
 ; Expects dist\cirax.exe (CLI) and dist\cirax-app\ (GUI onedir) to exist.
 
-#define AppVer GetEnvironmentVariable("APPVER")
 #ifndef AppVer
 #error Pass /DAPPVER=x.y.z
 #endif
