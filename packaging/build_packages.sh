@@ -31,6 +31,10 @@ uv run pyinstaller --onedir --name cirax-app --clean --noconfirm --windowed \
   --paths src --add-data "src/cirax/data:cirax/data" \
   desktop/cirax_app_entry.py >/dev/null
 
+# use the host's fontconfig: bundled copies from CI builders misparse the
+# host's /etc/fonts configs and spam warnings (or worse) on launch
+rm -f dist/cirax-app/_internal/libfontconfig*
+
 # 4. AppImage
 APPDIR="$BUNDLES/Cirax.AppDir"
 mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/share/applications" \

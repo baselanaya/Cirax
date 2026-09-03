@@ -508,6 +508,11 @@ class MainWindow(QMainWindow):
         self.sandbox_box = QCheckBox("Sandbox")
         self.sandbox_box.setChecked(True)
         row.addWidget(self.sandbox_box)
+        self.ai_box = QCheckBox("AI transforms")
+        self.ai_box.setToolTip(
+            "allow generative AI routes (GLM-OCR, piper) — off by default")
+        self.ai_box.toggled.connect(lambda _c: self._refresh_targets())
+        row.addWidget(self.ai_box)
         row.addStretch()
         cv.addLayout(row)
         return card_w
@@ -835,6 +840,7 @@ class MainWindow(QMainWindow):
     # ---------- departures ----------
     def _refresh_targets(self):
         self._reach = {}
+        allow_ai = self.ai_box.isChecked()
         if not self._pending:
             return
         src_mimes = {}
@@ -844,7 +850,8 @@ class MainWindow(QMainWindow):
         src_set = set(src_mimes.values())
         for p in self._pending:
             mime = src_mimes[p]
-            for t_mime, plan in reachable(self.reg, mime).items():
+            for t_mime, plan in reachable(self.reg, mime,
+                                          allow_ai=allow_ai).items():
                 if t_mime in src_set:
                     continue
                 cur = self._reach.get(t_mime)
@@ -911,7 +918,8 @@ class MainWindow(QMainWindow):
         boards = []
         for src in paths:
             mime, _ = detect(src, self.reg.ext_to_mime)
-            plan = find_plan(self.reg, mime, dst_mime)
+            plan = find_plan(self.reg, mime, dst_mime,
+                             allow_ai=self.ai_box.isChecked())
             if plan is None:
                 self.status.setText(f"no route for {src.name} ({mime})")
                 continue

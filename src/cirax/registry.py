@@ -167,6 +167,7 @@ class Engine:
     routes: list[Route] = field(default_factory=list)
     presets: dict[str, dict[str, object]] = field(default_factory=dict)
     sandbox: str = "default"  # "default" | "none" (needs local daemon/net)
+    ai: bool = False  # generative AI engine — opt-in routes only
     install_windows: str | None = None  # scoop/winget/pip hint for Windows
     binaries_windows: str | None = None  # Windows binary name (e.g. gswin64c)
     search_windows: list[str] = field(default_factory=list)
@@ -252,6 +253,7 @@ def _build_engine(d: dict) -> Engine:
         routes=[_build_route(r) for r in d.get("routes", [])],
         presets=dict(d.get("presets", {})),
         sandbox=d.get("sandbox", "default"),
+        ai=bool(d.get("ai", False)),
         install_windows=d.get("install_windows"),
         binaries_windows=d.get("binaries_windows"),
         search_windows=list(d.get("search_windows", [])),

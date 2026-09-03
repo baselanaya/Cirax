@@ -117,7 +117,9 @@ def make_handler(reg, args):
                 if not src or not dst:
                     self._json({"error": "pass ?from=<mime>&to=<mime>"}, 400)
                     return
-                plan = find_plan(reg, src, dst)
+                allow_ai = qs.get("allow_ai", ["false"])[0].lower() in (
+                    "1", "true", "yes")
+                plan = find_plan(reg, src, dst, allow_ai=allow_ai)
                 if plan is None:
                     self._json({"error": f"no route from {src} to {dst}"}, 404)
                     return
@@ -165,8 +167,10 @@ def make_handler(reg, args):
             try:
                 src = workdir / upload_name
                 src.write_bytes(payload[1])
+                allow_ai = qs.get("allow_ai", ["false"])[0].lower() in (
+                    "1", "true", "yes")
                 src_mime, _ = detect(src, reg.ext_to_mime)
-                plan = find_plan(reg, src_mime, dst_mime)
+                plan = find_plan(reg, src_mime, dst_mime, allow_ai=allow_ai)
                 if plan is None:
                     self._json({"error": f"no route from {src_mime} to "
                                          f"{dst_mime}"}, 422)

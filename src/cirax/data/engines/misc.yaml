@@ -149,6 +149,7 @@ engines:
       ~/.local/state/cirax/models/piper/ (see docs/ENGINES.md)
     description: Offline text-to-speech (TXT to WAV) via the rhasspy piper CLI
     categories: [audio]
+    ai: true
     setup_hint: >-
       download a voice model into ~/.local/state/cirax/models/piper/
       (e.g. en_US-lessac-medium.onnx + .onnx.json from

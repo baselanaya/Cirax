@@ -169,7 +169,7 @@ def cmd_plan(args) -> int:
 
     target = args.to
     if not target:
-        reach = reachable(reg, src_mime)
+        reach = reachable(reg, src_mime, allow_ai=args.ai)
         print(f"{src_path.name} detected as {src_mime} (via {how}); "
               f"{len(reach)} reachable targets:")
         for mime, plan in sorted(reach.items(), key=lambda kv: kv[1].cost):
@@ -182,7 +182,8 @@ def cmd_plan(args) -> int:
     if not dst_mime:
         print(f"error: unknown target format '{target}'", file=sys.stderr)
         return 1
-    plan = find_plan(reg, src_mime, dst_mime, engine_filter=args.engine)
+    plan = find_plan(reg, src_mime, dst_mime, engine_filter=args.engine,
+                     allow_ai=args.ai)
     if plan is None:
         print(f"no route from {src_mime} to {dst_mime}"
               + (f" for engine '{args.engine}'" if args.engine else ""),
@@ -220,9 +221,10 @@ def _convert_one(reg, args, src_path: Path, dst_path: Path) -> int:
         print("error: output is the same file as input", file=sys.stderr)
         return 1
 
-    plan = find_plan(reg, src_mime, dst_mime, engine_filter=args.engine)
+    plan = find_plan(reg, src_mime, dst_mime, engine_filter=args.engine,
+                     allow_ai=args.ai)
     if plan is None:
-        reach = reachable(reg, src_mime)
+        reach = reachable(reg, src_mime, allow_ai=args.ai)
         print(f"no route from {src_mime} to {dst_mime}", file=sys.stderr)
         if reach:
             print("Reachable targets: " + ", ".join(
@@ -399,6 +401,8 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("to", nargs="?", help="target extension or MIME "
                                           "(omit to list reachable targets)")
     pl.add_argument("--engine", help="restrict the route to a specific engine")
+    pl.add_argument("--ai", action="store_true",
+                    help="include generative AI routes")
     pl.set_defaults(func=cmd_plan)
 
     c = sub.add_parser("convert", help="convert one or many files")
@@ -410,6 +414,8 @@ def build_parser() -> argparse.ArgumentParser:
                                     "dos2unix, tesseract vs glm-ocr)")
     c.add_argument("--sandbox", choices=["auto", "on", "off"], default="auto",
                    help="bwrap sandbox: auto (default), on, off")
+    c.add_argument("--ai", action="store_true",
+                   help="allow generative AI routes (OCR, TTS)")
     c.add_argument("--pages", default="first", metavar="N|M-K|all",
                    help="for pdf->image routes: first (default), all, "
                         "a page number, or a range")
@@ -428,6 +434,8 @@ def build_parser() -> argparse.ArgumentParser:
     w.add_argument("--interval", type=float, default=2.0,
                    help="poll interval seconds (default 2)")
     w.add_argument("--sandbox", choices=["auto", "on", "off"], default="auto")
+    w.add_argument("--ai", action="store_true",
+                   help="include generative AI routes")
     w.set_defaults(func=cmd_watch)
 
     s = sub.add_parser("serve", help="local web UI (upload → convert → download)")

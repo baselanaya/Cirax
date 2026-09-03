@@ -50,13 +50,16 @@ def _edge_cost(route: Route) -> float:
 
 
 def _adjacency(reg: Registry, fmt: str,
-               engine_filter: str | None = None) -> list[tuple[str, Step, float]]:
+               engine_filter: str | None = None,
+               allow_ai: bool = False) -> list[tuple[str, Step, float]]:
     """All (target_format, step, cost) edges leaving `fmt` via installed engines."""
     edges = []
     for engine in reg.engines:
         if not engine.installed or not engine.executable:
             continue
         if engine_filter is not None and engine.name != engine_filter:
+            continue
+        if engine.ai and not allow_ai:
             continue
         for route in engine.routes:
             if route.ops:
@@ -72,7 +75,8 @@ def _adjacency(reg: Registry, fmt: str,
 
 
 def find_plan(reg: Registry, src: str, dst: str,
-              engine_filter: str | None = None) -> Plan | None:
+              engine_filter: str | None = None,
+              allow_ai: bool = False) -> Plan | None:
     """Dijkstra over the format graph, max MAX_HOPS engine invocations.
 
     For src == dst, only same-format `ops` routes (strip metadata, line
@@ -108,7 +112,8 @@ def find_plan(reg: Registry, src: str, dst: str,
             return Plan(src, dst, path, cost)
         if hops >= MAX_HOPS:
             continue
-        for target, step, step_cost in _adjacency(reg, fmt, engine_filter):
+        for target, step, step_cost in _adjacency(reg, fmt, engine_filter,
+                                                  allow_ai):
             nc, nh = cost + step_cost, hops + 1
             if best.get(target, (float("inf"), 99)) <= (nc, nh):
                 continue
@@ -117,7 +122,8 @@ def find_plan(reg: Registry, src: str, dst: str,
     return None
 
 
-def reachable(reg: Registry, src: str) -> dict[str, Plan]:
+def reachable(reg: Registry, src: str,
+              allow_ai: bool = False) -> dict[str, Plan]:
     """Every format reachable from src, with the best plan to get there."""
     out: dict[str, Plan] = {}
     best: dict[str, tuple[float, int]] = {src: (0.0, 0)}
@@ -130,7 +136,8 @@ def reachable(reg: Registry, src: str) -> dict[str, Plan]:
             out[fmt] = Plan(src, fmt, path, cost)
         if hops >= MAX_HOPS:
             continue
-        for target, step, step_cost in _adjacency(reg, fmt):
+        for target, step, step_cost in _adjacency(reg, fmt, None,
+                                                  allow_ai):
             nc, nh = cost + step_cost, hops + 1
             if best.get(target, (float("inf"), 99)) <= (nc, nh):
                 continue

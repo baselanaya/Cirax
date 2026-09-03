@@ -13,6 +13,7 @@ engines:
     install_windows: "winget install Ollama.Ollama"
     description: "GLM-OCR vision model (zai-org, MIT) — state-of-the-art local OCR via Ollama"
     categories: [image, document, ai]
+    ai: true
     sandbox: none
     setup_hint: "ollama pull glm-ocr   # ~1 GB, one time; fully offline afterwards"
     probe:
@@ -51,6 +52,7 @@ engines:
     install_windows: "winget install Ollama.Ollama"
     description: Offline speech-to-text (audio/video to SRT/VTT/TXT)
     categories: [audio, subtitle, ai]
+    ai: true
     sandbox: none
     setup_hint: "ollama pull whisper   # then: cirax convert talk.mp3 -t srt"
     probe:
