@@ -123,7 +123,6 @@ jobs:
             dist/packages/cirax-*-macos-cli.zip
 
   npm:
-  npm:
     if: github.event_name == 'workflow_dispatch' && inputs.npm == true
     runs-on: ubuntu-latest
     defaults:
