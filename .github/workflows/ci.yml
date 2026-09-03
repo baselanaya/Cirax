@@ -95,6 +95,20 @@ jobs:
           grep -qi cirax readme.txt
           echo "macos conversions ok"
 
+  gui-smoke-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --group desktop
+      - name: build desktop app (onedir)
+        run: |
+          uv run pyinstaller --onedir --windowed --name cirax-app --clean --noconfirm \
+            --paths src --add-data "src/cirax/data:data" desktop/cirax_app_entry.py
+      - name: frozen app smoke (constructs every page)
+        run: |
+          QT_QPA_PLATFORM=offscreen CIRAX_SMOKE=1 dist/cirax-app/cirax-app
+
   test-windows:
     runs-on: windows-latest
     defaults:
