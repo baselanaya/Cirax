@@ -13,6 +13,90 @@ from importlib import resources
 
 TREE_FMT = "application/x-tree"  # pseudo-format: an extracted directory
 
+# The first token of a MIME type is not a domain (everything "application/…"
+# would collapse into one bucket). This map curates the exceptions; anything
+# not listed falls back to its MIME first token (image/png → image).
+DOMAIN_BY_MIME = {
+    # documents
+    "application/pdf": "document",
+    "application/msword": "document",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "document",
+    "application/vnd.oasis.opendocument.text": "document",
+    "application/rtf": "document",
+    "text/x-ps": "document",
+    "text/markdown": "document",
+    "text/html": "document",
+    "text/plain": "document",
+    "text/x-tex": "document",
+    "text/x-typst": "document",
+    "text/org": "document",
+    "text/x-rst": "document",
+    # spreadsheets
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "spreadsheet",
+    "application/vnd.ms-excel": "spreadsheet",
+    "application/vnd.oasis.opendocument.spreadsheet": "spreadsheet",
+    "text/csv": "spreadsheet",
+    "text/tab-separated-values": "spreadsheet",
+    "application/x-parquet": "spreadsheet",
+    # presentations
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "presentation",
+    "application/vnd.ms-powerpoint": "presentation",
+    "application/vnd.oasis.opendocument.presentation": "presentation",
+    # ebooks
+    "application/epub+zip": "ebook",
+    "application/x-mobipocket-ebook": "ebook",
+    "application/vnd.amazon.ebook": "ebook",
+    "application/x-fictionbook+xml": "ebook",
+    "application/vnd.comicbook+zip": "ebook",
+    # archives
+    "application/zip": "archive",
+    "application/x-7z-compressed": "archive",
+    "application/x-tar": "archive",
+    "application/vnd.rar": "archive",
+    "application/x-iso9660-image": "archive",
+    TREE_FMT: "archive",
+    # compression (single file)
+    "application/zstd": "compression",
+    "application/gzip": "compression",
+    "application/x-xz": "compression",
+    # data
+    "application/json": "data",
+    "application/x-ndjson": "data",
+    "application/yaml": "data",
+    "application/xml": "data",
+    # subtitles
+    "application/x-subrip": "subtitle",
+    "text/vtt": "subtitle",
+    "text/x-ssa": "subtitle",
+    # 3D ("model" first token → model3d domain)
+    "model/gltf+json": "model3d",
+    "model/gltf-binary": "model3d",
+    "model/obj": "model3d",
+    "model/stl": "model3d",
+    "model/ply": "model3d",
+    "model/fbx": "model3d",
+    "model/vnd.collada+xml": "model3d",
+    "model/x-blend": "model3d",
+    "model/3mf": "model3d",
+    "model/3ds": "model3d",
+    "model/x3d": "model3d",
+    # disks
+    "application/x-qemu-disk": "disk",
+    "application/x-vmdk": "disk",
+    "application/x-vdi": "disk",
+    "application/x-vhd": "disk",
+    "application/x-vhdx": "disk",
+    "application/x-raw-disk": "disk",
+    # gis
+    "application/geo+json": "gis",
+    "application/vnd.google-earth.kml+xml": "gis",
+    "application/geopackage+sqlite3": "gis",
+}
+
+
+def domain_for(mime: str) -> str:
+    return DOMAIN_BY_MIME.get(mime, mime.split("/")[0])
+
 
 @dataclass
 class Route:
@@ -170,7 +254,7 @@ def load() -> Registry:
     fmts = yaml.safe_load((data_dir / "formats.yaml").read_text())
     reg.domains = {k: list(v.get("pivot", [])) for k, v in fmts.get("domains", {}).items()}
     for mime, f in fmts.get("formats", {}).items():
-        domain = mime.split("/")[0]
+        domain = domain_for(mime)
         reg.formats[mime] = Format(
             mime=mime, ext=f["ext"], name=f.get("name", ""), domain=domain
         )

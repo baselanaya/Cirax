@@ -32,6 +32,8 @@ domains:
     pivot: [application/x-subrip]
   gis:
     pivot: [application/geo+json]
+  disk:
+    pivot: [application/x-qemu-disk]
   compression:
     pivot: [application/zstd]
 

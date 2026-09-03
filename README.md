@@ -11,6 +11,13 @@
   Don't upload. Convert.</p>
 </div>
 
+<div align="center">
+  <img src="docs/screenshots/convert.png" alt="Cirax convert page" width="86%">
+  <p><sub>The convert page: drop files, and the target list is built from what
+  they actually are — each entry shows the engine chain and its loss tag.</sub></p>
+</div>
+
+
 ---
 
 **Cirax** turns your Linux machine into a conversion hub. One command reaches
@@ -117,6 +124,8 @@ flowchart LR
     G --> H
     H --> I[Output]
 ```
+
+The complete machine-readable format map lives at [docs/FORMATS.md](docs/FORMATS.md) (auto-generated from the registry).
 
 Inputs are detected with `file(1)` + an extension table; the router searches
 the capability graph up to three hops through pivot formats (PDF, PNG, WAV,
