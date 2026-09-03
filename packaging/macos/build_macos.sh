@@ -2,7 +2,7 @@
 # Build macOS artifacts: Cirax.app (desktop app + CLI inside) and a .dmg.
 # Designed for CI (macos-latest); needs uv + sips/iconutil (macOS built-ins).
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 ROOT="$PWD"
 VER="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
 OUT="$ROOT/dist/packages"
