@@ -2,6 +2,9 @@
 
 Python stdlib only — no web framework. Binds to 127.0.0.1 by default;
 uploads run through the exact same sandboxed engine pipeline as the CLI.
+The page itself lives in cirax/data/web/index.html (bundled like the rest
+of the registry data); this module also doubles as the API surface for
+external shells (see docs/TAURI-WINDOWS.md).
 """
 
 from __future__ import annotations
@@ -11,13 +14,15 @@ import re
 import shutil
 import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from importlib.resources import files
 from pathlib import Path
 
-from .detect import detect
-from .executor import ConversionError, execute
-from .probe import probe_all
-from .router import find_plan
+from cirax.detect import detect
+from cirax.executor import ConversionError, execute
+from cirax.probe import probe_all
+from cirax.router import find_plan
 
+_PAGE = (files("cirax") / "data" / "web" / "index.html").read_text()
 _MAX_BODY = 1024 * 1024 * 1024  # 1 GiB hard cap
 
 
@@ -39,108 +44,6 @@ def parse_multipart(body: bytes, boundary: str) -> dict[str, tuple[str | None, b
     return fields
 
 
-_PAGE = """<!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cirax — local conversion hub</title>
-<style>
-:root { color-scheme: dark; }
-* { box-sizing: border-box; }
-body { font-family: system-ui, sans-serif; margin: 0 auto; padding: 2rem;
-       max-width: 46rem; background: #101418; color: #dbe4ec; }
-h1 { font-size: 1.4rem; margin: 0 0 .2rem; }
-h1 span { color: #5ac8fa; }
-p.sub { color: #7d8b99; margin-top: 0; }
-#drop { border: 2px dashed #33424f; border-radius: 12px; padding: 2.2rem 1rem;
-        text-align: center; cursor: pointer; transition: border-color .15s; }
-#drop.over { border-color: #5ac8fa; }
-.row { display: flex; gap: .6rem; margin: 1rem 0; }
-select, button { font: inherit; padding: .55rem .8rem; border-radius: 8px;
-                 border: 1px solid #33424f; background: #1a2129; color: inherit; }
-button { background: #1668a8; border-color: #1668a8; cursor: pointer; }
-button:disabled { opacity: .5; cursor: wait; }
-#status { min-height: 1.4rem; color: #9fb0bf; }
-#status.err { color: #ff8484; }
-a.dl { display: none; margin-top: .4rem; }
-table { border-collapse: collapse; width: 100%; font-size: .86rem; margin-top: .6rem; }
-td, th { padding: .3rem .5rem; border-bottom: 1px solid #202b34; text-align: left; }
-th { color: #7d8b99; font-weight: 500; }
-.ok { color: #7fd18b; } .miss { color: #5c6b78; }
-footer { margin-top: 2rem; color: #5c6b78; font-size: .8rem; }
-</style></head><body>
-<h1><span>●</span> Cirax</h1>
-<p class="sub">every format → every format · 100% local · nothing leaves this machine</p>
-
-<div id="drop">drop a file here, or click to choose</div>
-<input id="file" type="file" hidden>
-<div class="row">
-  <select id="target"></select>
-  <button id="go" disabled>Convert</button>
-</div>
-<div id="status"></div>
-<a id="dl" class="dl button" download>Download result</a>
-
-<h2 style="font-size:1rem;margin-top:2.4rem">Engine matrix</h2>
-<table id="engines"><tr><th>Engine</th><th>Status</th><th>Version</th><th>Domains</th></tr></table>
-<footer>CLI: <code>cirax doctor · plan · convert · watch</code> — sandboxed with bwrap, offline.</footer>
-
-<script>
-const $ = id => document.getElementById(id);
-let f = null;
-const drop = $("drop");
-drop.onclick = () => $("file").click();
-drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
-drop.ondragleave = () => drop.classList.remove("over");
-drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); pick(e.dataTransfer.files[0]); };
-$("file").onchange = e => pick(e.target.files[0]);
-function pick(x) {
-  if (!x) return;
-  f = x; drop.textContent = f.name + "  (" + (f.size/1048576).toFixed(1) + " MB)";
-  $("go").disabled = false; $("dl").style.display = "none"; $("status").textContent = "";
-}
-fetch("/api/formats").then(r => r.json()).then(fmts => {
-  const by = {};
-  for (const x of fmts) (by[x.domain] = by[x.domain] || []).push(x);
-  for (const [dom, list] of Object.entries(by)) {
-    const g = document.createElement("optgroup"); g.label = dom;
-    for (const x of list.sort((a,b) => a.ext.localeCompare(b.ext))) {
-      const o = document.createElement("option"); o.value = x.ext;
-      o.textContent = "." + x.ext + " — " + x.name; g.append(o);
-    }
-    $("target").append(g);
-  }
-});
-$("go").onclick = async () => {
-  if (!f) return;
-  $("go").disabled = true; $("status").textContent = "converting…"; $("dl").style.display = "none";
-  const fd = new FormData(); fd.append("file", f);
-  try {
-    const r = await fetch("/api/convert?to=" + encodeURIComponent($("target").value),
-                          { method: "POST", body: fd });
-    if (!r.ok) { const e = await r.json().catch(() => ({error: r.statusText}));
-                 throw new Error(e.error || r.statusText); }
-    const blob = await r.blob();
-    const cd = r.headers.get("Content-Disposition") || "";
-    const name = (cd.match(/filename="(.*)"/) || [])[1] || "result";
-    const url = URL.createObjectURL(blob);
-    const a = $("dl"); a.href = url; a.download = name; a.style.display = "inline-block";
-    a.textContent = "Download " + name + " (" + (blob.size/1048576).toFixed(1) + " MB)";
-    $("status").textContent = "done.";
-  } catch (err) { $("status").textContent = "error: " + err.message;
-                  $("status").className = "err"; }
-  $("go").disabled = false;
-};
-fetch("/api/engines").then(r => r.json()).then(rows => {
-  const t = $("engines");
-  for (const e of rows) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${e.name}</td>` +
-      `<td class="${e.installed ? "ok" : "miss"}">${e.installed ? "installed" : "—"}</td>` +
-      `<td>${e.version || ""}</td><td>${e.categories.join(", ")}</td>`;
-    t.append(tr);
-  }
-});
-</script></body></html>"""
 
 
 def make_handler(reg, args):
@@ -255,6 +158,9 @@ def make_handler(reg, args):
                 self.send_response(200)
                 self.send_header("Content-Type",
                                  "application/octet-stream")
+                self.send_header("X-Cirax-Route", " -> ".join(plan.engines))
+                self.send_header("X-Cirax-Loss",
+                                 "lossless" if plan.lossless else "lossy")
                 self.send_header("Content-Length", str(len(data)))
                 self.send_header("Content-Disposition",
                                  f'attachment; filename="{out_name}"')

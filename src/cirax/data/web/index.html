@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cirax — the interchange</title>
+<style>
+:root {
+  --ink: #0d1118; --card: rgba(23,31,40,.82); --line: #233041;
+  --signal: #56c8f5; --brass: #d9a441; --rose: #f27e7e; --mist: #93a4b3;
+  --mono: "Cascadia Mono", "JetBrains Mono", "Fira Code", monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh; color: #dbe4ec;
+  font-family: "Segoe UI Variable", "Segoe UI", Cantarell, sans-serif;
+  background:
+    radial-gradient(600px 380px at 85% -10%, rgba(22,104,168,.25), transparent 70%),
+    radial-gradient(700px 420px at 5% 105%, rgba(90,200,250,.16), transparent 70%),
+    var(--ink);
+}
+main { max-width: 46rem; margin: 0 auto; padding: 2.4rem 1.4rem 3rem; }
+h1 { font-size: 20px; letter-spacing: 1px; margin: 0; color: #fff; }
+h1 span { color: var(--signal); }
+.tag { color: var(--mist); margin: .1rem 0 1.6rem; font-size: .9rem; }
+.card {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 12px; padding: 1.1rem 1.2rem; margin-bottom: 1rem;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+#drop {
+  border: 2px dashed #33424f; border-radius: 10px; padding: 2rem 1rem;
+  text-align: center; color: var(--mist); cursor: pointer;
+}
+#drop.over { border-color: var(--signal); color: #dbe4ec; }
+.row { display: flex; gap: .6rem; align-items: center; margin: .8rem 0; flex-wrap: wrap; }
+label { color: var(--mist); }
+select, button {
+  font: inherit; padding: .5rem .8rem; border-radius: 8px;
+  border: 1px solid #2a3844; background: rgba(26,33,41,.9); color: #dbe4ec;
+}
+select:focus, button:focus, #drop:focus { outline: 2px solid var(--signal); outline-offset: 1px; }
+button#go { background: #1668a8; border: none; font-weight: 600; }
+button:disabled { opacity: .5; cursor: wait; }
+#board {
+  font-family: var(--mono); background: rgba(13,17,24,.85);
+  border: 1px solid var(--line); border-radius: 10px; padding: .6rem .8rem;
+  margin: .6rem 0; display: none; overflow-x: auto; white-space: nowrap;
+}
+#status { min-height: 1.3rem; color: var(--mist); }
+#status.bad { color: var(--rose); }
+a.dl { display: none; color: var(--signal); margin-top: .3rem; }
+table { border-collapse: collapse; width: 100%; font-size: .86rem; margin-top: .5rem; }
+td, th { padding: .35rem .5rem; border-bottom: 1px solid #1b2530; text-align: left; }
+th { color: var(--mist); font-weight: 500; }
+.ok { color: #7fd18b; } .miss { color: #5c6b78; }
+footer { margin-top: 2rem; color: #5c6b78; font-size: .8rem;
+         font-family: var(--mono); }
+</style></head><body>
+<main>
+  <h1><span>●</span> Cirax</h1>
+  <p class="tag">the interchange · every format → every format · 100% local · sandboxed</p>
+
+  <div class="card">
+    <div id="drop" tabindex="0">drag & drop files — or click to browse</div>
+    <input id="file" type="file" hidden>
+    <div class="row">
+      <label for="target">Convert to:</label>
+      <select id="target"></select>
+      <button id="go" disabled>Convert</button>
+    </div>
+    <div id="board"></div>
+    <div id="status">ready</div>
+    <a id="dl" class="dl" download>Download result</a>
+  </div>
+
+  <div class="card">
+    <div class="row" style="margin:0"><b>Engines</b><span id="counts" class="tag"></span></div>
+    <table id="engines"><tr><th>Engine</th><th>Status</th><th>Version</th><th>Domains</th></tr></table>
+  </div>
+
+  <footer>cirax · nothing leaves this machine · cli: doctor · plan · convert · watch</footer>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let f = null;
+const drop = $("drop");
+drop.onclick = () => $("file").click();
+drop.onkeydown = e => { if (e.key === "Enter" || e.key === " ") $("file").click(); };
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); pick(e.dataTransfer.files[0]); };
+$("file").onchange = e => pick(e.target.files[0]);
+function pick(x) {
+  if (!x) return;
+  f = x; drop.textContent = f.name + "  (" + (f.size/1048576).toFixed(1) + " MB)";
+  $("go").disabled = false; $("dl").style.display = "none";
+  $("status").textContent = "ready — pick a target and convert";
+}
+fetch("/api/formats").then(r => r.json()).then(fmts => {
+  const by = {};
+  for (const x of fmts) (by[x.domain] = by[x.domain] || []).push(x);
+  for (const [dom, list] of Object.entries(by)) {
+    const g = document.createElement("optgroup"); g.label = dom;
+    for (const x of list.sort((a,b) => a.ext.localeCompare(b.ext))) {
+      const o = document.createElement("option"); o.value = x.ext;
+      o.textContent = "." + x.ext + " — " + x.name; g.append(o);
+    }
+    $("target").append(g);
+  }
+});
+fetch("/api/engines").then(r => r.json()).then(rows => {
+  const inst = rows.filter(e => e.installed).length;
+  $("counts").textContent = inst + "/" + rows.length + " engines installed";
+  const t = $("engines");
+  for (const e of rows) {
+    const tr = t.insertRow();
+    tr.innerHTML = `<td>${e.name}</td>` +
+      `<td class="${e.installed ? "ok" : "miss"}">${e.installed ? "installed" : "missing"}</td>` +
+      `<td>${e.version || ""}</td><td>${e.categories.join(", ")}</td>`;
+  }
+});
+$("go").onclick = async () => {
+  if (!f) return;
+  $("go").disabled = true;
+  $("status").textContent = "converting…"; $("status").className = "";
+  $("dl").style.display = "none"; $("board").style.display = "none";
+  const fd = new FormData(); fd.append("file", f);
+  try {
+    const r = await fetch("/api/convert?to=" + encodeURIComponent($("target").value),
+                          { method: "POST", body: fd });
+    if (!r.ok) { const e = await r.json().catch(() => ({error: r.statusText}));
+                 throw new Error(e.error || r.statusText); }
+    const route = r.headers.get("X-Cirax-Route") || "";
+    const loss = r.headers.get("X-Cirax-Loss") || "";
+    if (route) {
+      const parts = route.split(" -> ");
+      let html = `<span style="color:var(--signal)">.${f.name.split(".").pop()}</span>`;
+      for (const p of parts) html += ` ──▸ <span style="background:rgba(26,33,41,.9);padding:1px 6px;border-radius:4px">${p}</span>`;
+      const ext = $("target").value;
+      html += ` ──▸ <span style="color:var(--brass)">.${ext}</span>`;
+      html += `  <span style="color:${loss === "lossless" ? "#7fd18b" : "#e0b45a"}">· ${loss}</span>`;
+      $("board").innerHTML = html; $("board").style.display = "block";
+    }
+    const blob = await r.blob();
+    const cd = r.headers.get("Content-Disposition") || "";
+    const name = (cd.match(/filename="(.*)"/) || [])[1] || "result";
+    const url = URL.createObjectURL(blob);
+    const a = $("dl"); a.href = url; a.download = name; a.style.display = "inline-block";
+    a.textContent = "Download " + name + " (" + (blob.size/1048576).toFixed(1) + " MB)";
+    $("status").textContent = "done.";
+  } catch (err) { $("status").textContent = "error: " + err.message;
+                  $("status").className = "bad"; }
+  $("go").disabled = false;
+};
+</script></body></html>

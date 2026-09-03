@@ -135,6 +135,26 @@ class JobSignals(QObject):
     done = Signal(str, bool, str)
 
 
+class WatchSignals(QObject):
+    log = Signal(str)
+
+
+class WatchJob(QRunnable):
+    """One watched-file conversion, off the UI thread."""
+
+    def __init__(self, fn):
+        super().__init__()
+        self.fn = fn
+        self.setAutoDelete(True)
+
+    @Slot()
+    def run(self):
+        try:
+            self.fn()
+        except Exception as exc:  # noqa: BLE001
+            print(f"watch job error: {exc}", file=sys.stderr)
+
+
 class ConversionJob(QRunnable):
     def __init__(self, reg, src: Path, dst: Path, plan, sandbox: str,
                  preset: str | None):
@@ -258,6 +278,8 @@ class Background(QWidget):
 
 
 class MainWindow(QMainWindow):
+    wlog_sig = Signal(str)
+
     def __init__(self):
         super().__init__()
         self.reg = load()
@@ -274,6 +296,7 @@ class MainWindow(QMainWindow):
         self._server = None
         self._watch_timer = None
         self._watch_state = {}
+        self.wlog_sig.connect(self._wlog)
         self.setWindowTitle("Cirax — universal local conversion hub")
         self.resize(1080, 700)
         self.setAcceptDrops(True)
@@ -410,6 +433,13 @@ class MainWindow(QMainWindow):
             for name in e.presets:
                 self.preset.addItem(f"{name} ({e.name})")
         row2.addWidget(self.preset, stretch=2)
+        row2.addWidget(QLabel("Engine:"))
+        self.engine = QComboBox()
+        self.engine.addItem("auto")
+        for e in self.reg.engines:
+            if e.installed and e.executable:
+                self.engine.addItem(e.name)
+        row2.addWidget(self.engine, stretch=2)
         self.sandbox_box = QCheckBox("Sandbox")
         self.sandbox_box.setChecked(True)
         row2.addWidget(self.sandbox_box)
@@ -802,6 +832,9 @@ class MainWindow(QMainWindow):
             return
         preset = self.preset.currentText().split(" (")[0]
         preset = None if preset == "default" else preset
+        engine_filter = None
+        if self.engine.currentText() != "auto":
+            engine_filter = self.engine.currentText()
         sandbox = "auto" if self.sandbox_box.isChecked() else "off"
 
         self.jobs.setRowCount(0)
@@ -809,7 +842,8 @@ class MainWindow(QMainWindow):
         queued = 0
         for src in paths:
             mime, _ = detect(src, self.reg.ext_to_mime)
-            plan = find_plan(self.reg, mime, dst_mime)
+            plan = find_plan(self.reg, mime, dst_mime,
+                             engine_filter=engine_filter)
             if plan is None:
                 self.status.setText(f"no route for {src.name} ({mime})")
                 continue
@@ -857,11 +891,21 @@ class MainWindow(QMainWindow):
         if ok:
             out = Path(msg)
             self.jobs.setItem(row, 4, QTableWidgetItem(out.name))
-            btn = QPushButton("open")
-            btn.setObjectName("open")
-            btn.setToolTip(str(out))
-            btn.clicked.connect(lambda _=False, p=out: open_path(p))
-            self.jobs.setCellWidget(row, 4, btn)
+            wrap = QWidget()
+            hl = QHBoxLayout(wrap)
+            hl.setContentsMargins(0, 0, 0, 0)
+            hl.setSpacing(6)
+            b1 = QPushButton("open")
+            b1.setObjectName("open")
+            b1.setToolTip(str(out))
+            b1.clicked.connect(lambda _=False, p=out: open_path(p))
+            b2 = QPushButton("folder")
+            b2.setObjectName("open")
+            b2.clicked.connect(lambda _=False, p=out.parent:
+                               open_path(p))
+            hl.addWidget(b1)
+            hl.addWidget(b2)
+            self.jobs.setCellWidget(row, 4, wrap)
             self.status.setText(f"done: {out.name}")
         else:
             self.jobs.setItem(row, 4, QTableWidgetItem(
@@ -917,13 +961,16 @@ class MainWindow(QMainWindow):
                 self._wlog(f"skip {f.name} (no route)")
                 continue
             dst = st["out"] / (f.stem + "." + self.reg.ext_for(st["mime"]))
-            try:
-                execute(plan, self.reg, f, dst, quiet=True)
-                st["done"][f.name] = mtime
-                self._wlog(f"done: {dst.name}")
-            except ConversionError as exc:
-                st["done"][f.name] = mtime
-                self._wlog(f"error {f.name}: {str(exc)[-120:]}")
+            st["done"][f.name] = mtime  # claimed; result logged on finish
+
+            def run_job(src=f, target=dst, p=plan, name=f.name):
+                try:
+                    execute(p, self.reg, src, target, quiet=True)
+                    self.wlog_sig.emit(f"done: {target.name}")
+                except ConversionError as exc:
+                    self.wlog_sig.emit(f"error {name}: {str(exc)[-120:]}")
+
+            self.pool.start(WatchJob(run_job))
 
     # ---------- serve ----------
     def _toggle_serve(self):
