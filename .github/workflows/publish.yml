@@ -80,7 +80,6 @@ jobs:
           uv run pyinstaller --onedir --windowed --name cirax-app --clean --noconfirm `
             --icon assets/cirax.ico `
             --paths src --add-data "src/cirax/data;cirax/data" `
-            --add-data "src/cirax/data/web;data/web" `
             desktop/cirax_app_entry.py
       - name: icon
         shell: pwsh
