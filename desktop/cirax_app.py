@@ -1,8 +1,8 @@
-"""Cirax desktop app — the interchange board.
+"""Cirax desktop app — the interchange.
 
 Files are passengers, engines are transit lines, pivot formats are
-interchanges. Each domain is a line with its own color; conversions are
-journeys shown on the route board. Same core as the CLI: registry,
+interchanges. Drop a file and the app walks you through the journey:
+detect → departures → destination. Same core as the CLI: registry,
 router, sandboxed executor — nothing leaves the machine.
 """
 
@@ -24,10 +24,11 @@ from PySide6.QtGui import (
     QPalette,
 )
 from PySide6.QtWidgets import (
-    QApplication, QButtonGroup, QCheckBox, QComboBox, QFrame, QSpinBox,
-    QFileDialog, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QMainWindow, QPushButton, QProgressBar, QScrollArea, QStackedWidget,
-    QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
+    QApplication, QButtonGroup, QCheckBox, QComboBox, QFrame,
+    QFileDialog, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
+    QMainWindow, QPushButton, QProgressBar, QScrollArea, QSpinBox,
+    QStackedLayout, QStackedWidget, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout,
+    QWidget,
 )
 
 from cirax import __version__
@@ -48,7 +49,6 @@ BRASS = "#d9a441"
 ROSE = "#f27e7e"
 MIST = "#93a4b3"
 
-# every domain is a transit line with its own color
 DOMAIN_LINES = {
     "image": "#f27e9b",
     "video": "#b07ef2",
@@ -78,6 +78,9 @@ QLabel#header {{ font-size: 20px; font-weight: 700; color: #ffffff;
 QLabel#tagline {{ color: {MIST}; }}
 QLabel#status {{ color: #9fb0bf; }}
 QLabel#pagetitle {{ font-size: 16px; font-weight: 600; }}
+QLabel#stepline {{ color: {MIST}; font-size: 11px; letter-spacing: 2px; }}
+QLabel#destext {{ font-family: {MONO}; font-size: 17px; font-weight: 700; }}
+QLabel#chain {{ font-family: {MONO}; font-size: 11px; color: {MIST}; }}
 QLabel#board {{
     font-family: {MONO}; font-size: 13px; color: #dbe4ec;
     background: rgba(13, 17, 24, 200); border: 1px solid #233041;
@@ -86,6 +89,13 @@ QLabel#board {{
 QFrame#card {{
     background: rgba(23, 31, 40, 200); border: 1px solid #233041;
     border-radius: 12px;
+}}
+QFrame#destcard {{
+    background: rgba(19, 26, 33, 215); border: 1px solid #26333f;
+    border-radius: 10px;
+}}
+QFrame#destcard:hover {{
+    border: 1px solid {SIGNAL}; background: rgba(28, 38, 48, 235);
 }}
 QFrame#sidebar {{ background: rgba(10, 13, 18, 230); border: none; }}
 QPushButton {{
@@ -178,52 +188,7 @@ class ConversionJob(QRunnable):
             self.signals.done.emit(str(self.src), False, str(exc)[-300:])
 
 
-def page_title(text: str, sub: str = "") -> QWidget:
-    w = QWidget()
-    h = QHBoxLayout(w)
-    h.setContentsMargins(0, 0, 0, 0)
-    t = QLabel(text)
-    t.setObjectName("pagetitle")
-    h.addWidget(t)
-    h.addStretch()
-    if sub:
-        s = QLabel(sub)
-        s.setObjectName("tagline")
-        h.addWidget(s)
-    return w
-
-
-def make_card(parent=None) -> tuple[QWidget, QVBoxLayout]:
-    frame = QFrame(parent)
-    frame.setObjectName("card")
-    v = QVBoxLayout(frame)
-    v.setContentsMargins(16, 14, 16, 14)
-    v.setSpacing(10)
-    return frame, v
-
-
-def _mono_font():
-    from PySide6.QtGui import QFont
-    f = QFont()
-    f.setFamilies(["Cascadia Mono", "JetBrains Mono", "Fira Code",
-                   "Consolas", "monospace"])
-    return f
-
-
-class _ScrollWrap(QScrollArea):
-    """Scroll container that keeps the glass cards at a readable width."""
-
-    def __init__(self, inner: QWidget):
-        super().__init__()
-        self.setWidgetResizable(True)
-        self.setWidget(inner)
-        self.setFrameShape(QScrollArea.NoFrame)
-
-
 def open_path(path: Path) -> None:
-    """Open with the system handler. Inside an AppImage, QDesktopServices
-    children inherit bundle libraries and fail to read good files — so we
-    launch the platform opener with a scrubbed environment instead."""
     path = Path(path)
     env = {k: v for k, v in os.environ.items()
            if k not in ("LD_LIBRARY_PATH", "PYTHONPATH", "PYTHONHOME")}
@@ -241,18 +206,14 @@ def open_path(path: Path) -> None:
 
 def route_board_html(plan) -> str:
     """The signature element: the journey as a transit board."""
-    src_ext = plan.src.split("/")[-1]
-    chips = [f'<span style="color:{SIGNAL}">.{src_ext}</span>']
+    chips = [f'<span style="color:{SIGNAL}">.{plan.src.split("/")[-1]}</span>']
     for step in plan.steps:
-        color = line_color(step.to_format.split("/")[0])
-        arrow = f'<span style="color:#3d4f60">&nbsp;──▸&nbsp;</span>'
-        chips.append(arrow)
+        chips.append('<span style="color:#3d4f60">&nbsp;──▸&nbsp;</span>')
         chips.append(f'<span style="background:rgba(26,33,41,220);'
                      f'border-radius:4px; padding:1px 6px;">'
                      f'{step.engine.name}</span>')
-    dst_ext = plan.dst.split("/")[-1]
-    chips.append(f'<span style="color:#3d4f60">&nbsp;──▸&nbsp;</span>')
-    chips.append(f'<span style="color:{BRASS}">.{dst_ext}</span>')
+    chips.append('<span style="color:#3d4f60">&nbsp;──▸&nbsp;</span>')
+    chips.append(f'<span style="color:{BRASS}">.{plan.dst.split("/")[-1]}</span>')
     return "".join(chips)
 
 
@@ -277,6 +238,86 @@ class Background(QWidget):
         p.end()
 
 
+def make_card(parent=None) -> tuple[QWidget, QVBoxLayout]:
+    frame = QFrame(parent)
+    frame.setObjectName("card")
+    v = QVBoxLayout(frame)
+    v.setContentsMargins(16, 14, 16, 14)
+    v.setSpacing(10)
+    return frame, v
+
+
+def page_title(text: str, sub: str = "") -> QWidget:
+    w = QWidget()
+    h = QHBoxLayout(w)
+    h.setContentsMargins(0, 0, 0, 0)
+    t = QLabel(text)
+    t.setObjectName("pagetitle")
+    h.addWidget(t)
+    h.addStretch()
+    if sub:
+        s = QLabel(sub)
+        s.setObjectName("tagline")
+        h.addWidget(s)
+    return w
+
+
+def _mono_font():
+    from PySide6.QtGui import QFont
+    f = QFont()
+    f.setFamilies(["Cascadia Mono", "JetBrains Mono", "Fira Code",
+                   "Consolas", "monospace"])
+    return f
+
+
+class DestinationCard(QFrame):
+    """A departure on the board: one place the dropped files can go."""
+
+    clicked = Signal(str)
+
+    def __init__(self, ext: str, mime: str, domain: str, chain: str,
+                 loss: str):
+        super().__init__()
+        self.setObjectName("destcard")
+        self.mime = mime
+        self.search_text = f".{ext} {domain} {chain} {loss}".lower()
+        color = DOMAIN_LINES.get(domain, "#8fa0b0")
+        self.setStyleSheet(
+            f'QFrame#destcard {{ border-left: 3px solid {color}; }}')
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedSize(220, 84)
+        self.setToolTip(f"convert to {mime}")
+
+        v = QVBoxLayout(self)
+        v.setContentsMargins(12, 10, 10, 10)
+        v.setSpacing(4)
+
+        top = QHBoxLayout()
+        top.setSpacing(6)
+        dot = QLabel("●")
+        dot.setStyleSheet(f"color: {color}; font-size: 10px;")
+        ext_lbl = QLabel(f".{ext}")
+        ext_lbl.setObjectName("destext")
+        top.addWidget(dot)
+        top.addWidget(ext_lbl)
+        top.addStretch()
+        loss_lbl = QLabel(loss)
+        loss_lbl.setStyleSheet(
+            f"color: {'#7fd18b' if loss == 'lossless' else '#e0b45a'};"
+            f"font-size: 11px;")
+        top.addWidget(loss_lbl)
+        v.addLayout(top)
+
+        chain_lbl = QLabel(chain)
+        chain_lbl.setObjectName("chain")
+        chain_lbl.setWordWrap(True)
+        v.addWidget(chain_lbl)
+
+    def mouseReleaseEvent(self, event):  # noqa: N802
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit(self.mime)
+
+
 class MainWindow(QMainWindow):
     wlog_sig = Signal(str)
 
@@ -293,16 +334,17 @@ class MainWindow(QMainWindow):
         self._reach: dict[str, dict] = {}
         self._row_by_src: dict[str, int] = {}
         self._domain_pages: dict[str, QWidget] = {}
+        self._dest_cards: list[DestinationCard] = []
         self._server = None
         self._watch_timer = None
         self._watch_state = {}
-        self.wlog_sig.connect(self._wlog)
         self.setWindowTitle("Cirax — universal local conversion hub")
         self.resize(1080, 700)
         self.setAcceptDrops(True)
         self._icon()
         self._dark()
         self._ui()
+        self.wlog_sig.connect(self._wlog)
 
     def _icon(self):
         cands = [Path("/usr/share/icons/hicolor/256x256/apps/cirax.png")]
@@ -352,6 +394,7 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         for i, (name, builder) in enumerate([
                 ("Convert", self._convert_page),
+                ("Lines", self._lines_page),
                 ("Watch", self._watch_page),
                 ("Serve", self._serve_page),
                 ("Engines", self._engines_page),
@@ -373,28 +416,35 @@ class MainWindow(QMainWindow):
         h.addWidget(self.stack, stretch=1)
         self.setCentralWidget(central)
 
-    def _open_domain(self, domain: str):
-        if domain not in self._domain_pages:
-            page = self._domain_page(domain)
-            self._domain_pages[domain] = page
-            self.stack.addWidget(page)
-        self.stack.setCurrentWidget(self._domain_pages[domain])
-
     # ---------- pages ----------
     def _convert_page(self) -> QWidget:
+        """The three-step pipeline: drop → departures → journey."""
         page = QWidget()
         v = QVBoxLayout(page)
         v.setContentsMargins(22, 18, 22, 18)
-        v.setSpacing(10)
 
+        steps = QLabel("DROP  ──  DEPARTURES  ──  JOURNEY")
+        steps.setObjectName("stepline")
+        v.addWidget(steps)
+
+        self.flow = QStackedLayout()
+        v.addLayout(self.flow, stretch=1)
+        self.flow.addWidget(self._step_drop())
+        self.flow.addWidget(self._step_departures())
+        self.flow.addWidget(self._step_journey())
+        return page
+
+    def _step_drop(self) -> QWidget:
         card_w, cv = make_card()
-        v.addWidget(card_w, stretch=1)
+        step = QLabel("STEP 1 · DROP")
+        step.setObjectName("stepline")
+        cv.addWidget(step)
 
         self.drop = QLabel(
             "drag & drop files anywhere — or click to browse\n"
             "webp · heic · raw · docx · epub · pdf · mp4 · flac · zip · glb …")
         self.drop.setAlignment(Qt.AlignCenter)
-        self.drop.setFixedHeight(84)
+        self.drop.setFixedHeight(110)
         self.drop.setStyleSheet(
             "border: 2px dashed #33424f; border-radius: 10px; color: #9fb0bf;")
         cv.addWidget(self.drop)
@@ -406,67 +456,73 @@ class MainWindow(QMainWindow):
         self.detected_label = QLabel("")
         self.detected_label.setObjectName("tagline")
         self.detected_label.setWordWrap(True)
+        self.detected_label.hide()
+        cv.addWidget(self.detected_label)
+        return card_w
+
+    def _step_departures(self) -> QWidget:
+        card_w, cv = make_card()
+        top = QHBoxLayout()
+        back = QPushButton("← drop different files")
+        back.setObjectName("back")
+        back.clicked.connect(lambda: self.flow.setCurrentIndex(0))
+        top.addWidget(back)
+        top.addStretch()
+        cv.addLayout(top)
+
+        step = QLabel("STEP 2 · DEPARTURES")
+        step.setObjectName("stepline")
+        cv.addWidget(step)
+
+        head = QLabel("Where should it go?")
+        head.setObjectName("pagetitle")
+        cv.addWidget(head)
+        self.detected_label = QLabel("")
+        self.detected_label.setObjectName("tagline")
+        self.detected_label.setWordWrap(True)
         cv.addWidget(self.detected_label)
 
+        self.dest_filter = QLineEdit()
+        self.dest_filter.setPlaceholderText("filter destinations…")
+        self.dest_filter.textChanged.connect(self._filter_dest_cards)
+        cv.addWidget(self.dest_filter)
+
+        grid_host = QWidget()
+        self.dest_grid = QGridLayout(grid_host)
+        self.dest_grid.setSpacing(10)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setWidget(grid_host)
+        scroll.setMinimumHeight(250)
+        cv.addWidget(scroll, stretch=1)
+
         row = QHBoxLayout()
-        row.addWidget(QLabel("Convert to:"))
-        self.target = QComboBox()
-        self.target.setEnabled(False)
-        self.target.addItem("add files to see possible targets", "")
-        self.target.currentIndexChanged.connect(self._target_hint)
-        self.target.setSizeAdjustPolicy(QComboBox.AdjustToContents)
-        row.addWidget(self.target, stretch=1)
-        cv.addLayout(row)
-
-        self.board = QLabel("")
-        self.board.setObjectName("board")
-        self.board.setTextFormat(Qt.RichText)
-        self.board.setWordWrap(True)
-        self.board.hide()
-        cv.addWidget(self.board)
-
-        row2 = QHBoxLayout()
-        row2.addWidget(QLabel("Preset:"))
+        row.addWidget(QLabel("Preset:"))
         self.preset = QComboBox()
         self.preset.addItem("default")
         for e in self.reg.engines:
             for name in e.presets:
                 self.preset.addItem(f"{name} ({e.name})")
-        row2.addWidget(self.preset, stretch=2)
-        row2.addWidget(QLabel("Engine:"))
-        self.engine = QComboBox()
-        self.engine.addItem("auto")
-        for e in self.reg.engines:
-            if e.installed and e.executable:
-                self.engine.addItem(e.name)
-        row2.addWidget(self.engine, stretch=2)
+        row.addWidget(self.preset, stretch=2)
         self.sandbox_box = QCheckBox("Sandbox")
         self.sandbox_box.setChecked(True)
-        row2.addWidget(self.sandbox_box)
-        row2.addStretch()
-        cv.addLayout(row2)
+        row.addWidget(self.sandbox_box)
+        row.addStretch()
+        cv.addLayout(row)
+        return card_w
 
-        # domain line grid — 3 across, wraps
-        grid_label = QLabel("the lines")
-        grid_label.setObjectName("tagline")
-        cv.addWidget(grid_label)
-        from PySide6.QtWidgets import QGridLayout
-        grid = QGridLayout()
-        grid.setSpacing(8)
-        self.domain_buttons: dict[str, QPushButton] = {}
-        domains = sorted({f.domain for f in self.reg.formats.values()})
-        for k, dom in enumerate(domains):
-            fmts = sum(1 for f in self.reg.formats.values() if f.domain == dom)
-            btn = QPushButton(f"● {dom}")
-            btn.setToolTip(f"{fmts} formats · click to open the {dom} line")
-            btn.setStyleSheet(
-                f"QPushButton {{ color: {line_color(dom)}; text-align: left;"
-                f" padding: 6px 10px; }}")
-            btn.clicked.connect(lambda _=False, d=dom: self._open_domain(d))
-            grid.addWidget(btn, k // 3, k % 3)
-            self.domain_buttons[dom] = btn
-        grid.setColumnStretch(3, 1)
-        cv.addLayout(grid)
+    def _step_journey(self) -> QWidget:
+        card_w, cv = make_card()
+        step = QLabel("STEP 3 · JOURNEY")
+        step.setObjectName("stepline")
+        cv.addWidget(step)
+
+        self.board = QLabel("")
+        self.board.setObjectName("board")
+        self.board.setTextFormat(Qt.RichText)
+        self.board.setWordWrap(True)
+        cv.addWidget(self.board)
 
         self.jobs = QTableWidget(0, 5)
         self.jobs.setHorizontalHeaderLabels(
@@ -476,27 +532,44 @@ class MainWindow(QMainWindow):
         self.jobs.verticalHeader().setVisible(False)
         self.jobs.setEditTriggers(QTableWidget.NoEditTriggers)
         self.jobs.setSelectionMode(QTableWidget.NoSelection)
-        self.jobs.setMinimumHeight(170)
-        v.addWidget(self.jobs, stretch=1)
+        self.jobs.setMinimumHeight(200)
+        cv.addWidget(self.jobs, stretch=1)
 
         go = QHBoxLayout()
-        self.go = QPushButton("Convert")
-        self.go.setObjectName("primary")
-        self.go.setFixedHeight(38)
-        self.go.setEnabled(False)
-        self.go.clicked.connect(self._convert)
-        self.status = QLabel("ready")
+        again = QPushButton("← new conversion")
+        again.setObjectName("back")
+        again.clicked.connect(lambda: self.flow.setCurrentIndex(0))
+        self.status = QLabel("")
         self.status.setObjectName("status")
-        go.addWidget(self.go)
+        go.addWidget(again)
         go.addWidget(self.status, stretch=1)
-        v.addLayout(go)
+        cv.addLayout(go)
+        return card_w
 
-        wrap = QWidget()
-        wrap.setLayout(v)
-        scroll = _ScrollWrap(wrap)
+    def _lines_page(self) -> QWidget:
+        page = QWidget()
         outer = QVBoxLayout(page)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.addWidget(scroll)
+        outer.setContentsMargins(22, 18, 22, 18)
+        outer.addWidget(page_title("Lines", "one page per file-type domain"))
+        card_w, cv = make_card()
+        outer.addWidget(card_w, stretch=1)
+        grid = QGridLayout()
+        grid.setSpacing(10)
+        domains = sorted({f.domain for f in self.reg.formats.values()})
+        for k, dom in enumerate(domains):
+            fmts = sum(1 for f in self.reg.formats.values() if f.domain == dom)
+            btn = QPushButton(f"● {dom}   ·   {fmts} formats")
+            color = line_color(dom)
+            btn.setStyleSheet(
+                f"QPushButton {{ color: {color}; text-align: left;"
+                f" padding: 10px 14px; }}")
+            btn.clicked.connect(lambda _=False, d=dom: self._open_domain(d))
+            grid.addWidget(btn, k // 2, k % 2)
+        grid.setRowStretch(len(domains) // 2 + 1, 1)
+        cv.addLayout(grid)
+        cv.addWidget(QLabel(
+            "each line page lists the formats on it and the engines that "
+            "read and write them on this machine."))
         return page
 
     def _watch_page(self) -> QWidget:
@@ -641,7 +714,7 @@ class MainWindow(QMainWindow):
         top = QHBoxLayout()
         back = QPushButton("← all lines")
         back.setObjectName("back")
-        back.clicked.connect(lambda: self._goto_convert())
+        back.clicked.connect(self._goto_lines)
         top.addWidget(back)
         top.addStretch()
         v.addLayout(top)
@@ -700,8 +773,15 @@ class MainWindow(QMainWindow):
             "picked from this line and its interchanges automatically."))
         return page
 
-    def _goto_convert(self):
-        self.stack.setCurrentIndex(0)
+    def _open_domain(self, domain: str):
+        if domain not in self._domain_pages:
+            self._domain_pages[domain] = self._domain_page(domain)
+            self.stack.addWidget(self._domain_pages[domain])
+        self.stack.setCurrentWidget(self._domain_pages[domain])
+
+    def _goto_lines(self):
+        self.nav_group.button(1).setChecked(True)
+        self.stack.setCurrentIndex(1)
 
     def _fill_engines(self):
         needle = self.filter.text().lower()
@@ -719,19 +799,44 @@ class MainWindow(QMainWindow):
         self.counts.setText(f"{inst}/{len(rows)} engines shown · "
                             f"{len(self.reg.formats)} formats in vocabulary")
 
-    # ---------- targets ----------
+    def _build_destinations(self):
+        """Populate the departures grid from the dropped files' reach."""
+        while self.dest_grid.count():
+            item = self.dest_grid.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._dest_cards = []
+
+        by_domain: dict[str, list] = {}
+        for mime, info in sorted(self._reach.items(),
+                                 key=lambda kv: kv[1]["plan"].cost):
+            plan = info["plan"]
+            dom = mime.split("/")[0]
+            ext = self.reg.ext_for(mime)
+            loss = "lossless" if plan.lossless else "lossy"
+            by_domain.setdefault(dom, []).append(
+                (ext, mime, " → ".join(plan.engines), loss))
+        n = 0
+        for dom in sorted(by_domain):
+            for ext, mime, chain, loss in sorted(by_domain[dom]):
+                card = DestinationCard(ext, mime, dom, chain, loss)
+                card.clicked.connect(self._depart)
+                self.dest_grid.addWidget(card, n // 3, n % 3)
+                self._dest_cards.append(card)
+                n += 1
+        if n == 0:
+            empty = QLabel("no conversion targets found for these files")
+            empty.setObjectName("tagline")
+            self.dest_grid.addWidget(empty, 0, 0)
+        for i in range(self.dest_grid.count()):
+            self.dest_grid.setColumnStretch(i % 3, 1)
+            break
+
+    # ---------- departures ----------
     def _refresh_targets(self):
-        self.target.clear()
         self._reach = {}
         if not self._pending:
-            self.target.addItem("add files to see possible targets", "")
-            self.target.setEnabled(False)
-            self.go.setEnabled(False)
-            self.board.hide()
-            self._target_hint()
             return
-        self.target.setEnabled(True)
-
         src_mimes = {}
         for p in self._pending:
             mime, _ = detect(Path(p), self.reg.ext_to_mime)
@@ -745,41 +850,6 @@ class MainWindow(QMainWindow):
                 cur = self._reach.get(t_mime)
                 if cur is None or plan.cost < cur["plan"].cost:
                     self._reach[t_mime] = {"plan": plan}
-
-        by_domain: dict[str, list] = {}
-        for mime, info in self._reach.items():
-            plan = info["plan"]
-            dom = mime.split("/")[0]
-            ext = self.reg.ext_for(mime)
-            loss = "lossless" if plan.lossless else "lossy"
-            by_domain.setdefault(dom, []).append(
-                (plan.cost, ext, mime, " → ".join(plan.engines), loss))
-        n = 0
-        for dom in sorted(by_domain):
-            dot = line_color(dom)
-            for cost, ext, mime, chain, loss in sorted(by_domain[dom]):
-                self.target.addItem(
-                    f".{ext}   ·   via {chain}   ·   {loss}", mime)
-                n += 1
-            _ = dot
-        if n == 0:
-            self.target.addItem("no conversion targets found", "")
-            self.go.setEnabled(False)
-        else:
-            self.go.setEnabled(True)
-        self._target_hint()
-
-    def _target_hint(self):
-        mime = self.target.currentData()
-        info = self._reach.get(mime) if mime else None
-        if info:
-            plan = info["plan"]
-            loss = "lossless" if plan.lossless else "lossy"
-            self.status.setText(f"route: {' → '.join(plan.engines)} · {loss}")
-            self.board.setText(route_board_html(plan))
-            self.board.show()
-        elif not self._pending:
-            self.status.setText("ready")
 
     # ---------- drag & drop ----------
     def dragEnterEvent(self, event: QDragEnterEvent):
@@ -805,7 +875,9 @@ class MainWindow(QMainWindow):
             self.files_list.setText(
                 f"<b>{len(self._pending)}</b> file(s): {shown}{extra}")
         self._refresh_targets()
+        self._build_destinations()
         self._refresh_detected()
+        self.flow.setCurrentIndex(1)  # auto-advance to departures
 
     def _refresh_detected(self):
         parts = []
@@ -820,36 +892,31 @@ class MainWindow(QMainWindow):
             "detected: " + " · ".join(parts) if parts
             else "detected formats will appear here")
 
-    # ---------- conversion ----------
-    def _convert(self):
+    def _filter_dest_cards(self):
+        needle = self.dest_filter.text().lower()
+        for card in self._dest_cards:
+            card.setVisible(needle in card.search_text.lower())
+
+    # ---------- journey ----------
+    def _depart(self, dst_mime: str):
+        """A departure was chosen: build jobs and move to the journey."""
         paths = [Path(p) for p in self._pending]
-        if not paths:
-            self.status.setText("add at least one file")
-            return
-        dst_mime = self.target.currentData()
-        if not dst_mime:
-            self.status.setText("pick a target format first")
-            return
         preset = self.preset.currentText().split(" (")[0]
         preset = None if preset == "default" else preset
-        engine_filter = None
-        if self.engine.currentText() != "auto":
-            engine_filter = self.engine.currentText()
         sandbox = "auto" if self.sandbox_box.isChecked() else "off"
 
         self.jobs.setRowCount(0)
         self._row_by_src = {}
-        queued = 0
+        self.status.setText("")
+        boards = []
         for src in paths:
             mime, _ = detect(src, self.reg.ext_to_mime)
-            plan = find_plan(self.reg, mime, dst_mime,
-                             engine_filter=engine_filter)
+            plan = find_plan(self.reg, mime, dst_mime)
             if plan is None:
                 self.status.setText(f"no route for {src.name} ({mime})")
                 continue
             dst = src.with_suffix("." + self.reg.ext_for(dst_mime))
             if dst == src:
-                self.status.setText(f"skip {src.name}: pick a different target")
                 continue
             row = self.jobs.rowCount()
             self.jobs.insertRow(row)
@@ -864,9 +931,15 @@ class MainWindow(QMainWindow):
             job.signals.progress.connect(self._job_progress)
             job.signals.done.connect(self._job_done)
             self.pool.start(job)
-            queued += 1
-        self.status.setText(f"converting {queued} file(s)…" if queued
-                            else "nothing to convert")
+            boards.append(plan)
+        if boards:
+            self.flow.setCurrentIndex(2)
+            self.board.setText(route_board_html(boards[0]))
+            self.board.show()
+            self.status.setText(f"converting {len(boards)} file(s)…")
+        else:
+            self.flow.setCurrentIndex(1)
+            self.status.setText("nothing to convert — pick a destination")
 
     def _row_for(self, src_path: str) -> int | None:
         row = self._row_by_src.get(src_path)
@@ -901,8 +974,7 @@ class MainWindow(QMainWindow):
             b1.clicked.connect(lambda _=False, p=out: open_path(p))
             b2 = QPushButton("folder")
             b2.setObjectName("open")
-            b2.clicked.connect(lambda _=False, p=out.parent:
-                               open_path(p))
+            b2.clicked.connect(lambda _=False, p=out.parent: open_path(p))
             hl.addWidget(b1)
             hl.addWidget(b2)
             self.jobs.setCellWidget(row, 4, wrap)
@@ -961,7 +1033,7 @@ class MainWindow(QMainWindow):
                 self._wlog(f"skip {f.name} (no route)")
                 continue
             dst = st["out"] / (f.stem + "." + self.reg.ext_for(st["mime"]))
-            st["done"][f.name] = mtime  # claimed; result logged on finish
+            st["done"][f.name] = mtime
 
             def run_job(src=f, target=dst, p=plan, name=f.name):
                 try:
@@ -1006,14 +1078,13 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
-
 def main():
     app = QApplication(sys.argv)
     # CI smoke hook: construct the whole UI, report, exit — no event loop.
     if os.environ.get("CIRAX_SMOKE"):
         w = MainWindow()
         print(f"cirax-app smoke ok: {w.stack.count()} pages, "
-              f"{w.target.count()} formats in picker")
+              f"{w.flow.count()} pipeline steps")
         return 0
     win = MainWindow()
     win.show()

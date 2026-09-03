@@ -408,6 +408,14 @@ def execute(plan: Plan, reg: Registry, src_path: Path, dst_path: Path,
                                       proc.returncode))
             current = out
         return results
+    except ConversionError:
+        # never leave an empty result file behind a failed job
+        try:
+            if dst_path.exists() and dst_path.stat().st_size == 0:
+                dst_path.unlink()
+        except OSError:
+            pass
+        raise
     finally:
         if cleanup:
             shutil.rmtree(workdir, ignore_errors=True)
