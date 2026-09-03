@@ -449,6 +449,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Windows consoles default to legacy codecs (cp1252 etc.); our status
+    # glyphs and table borders are unicode — force UTF-8 with replacement
+    # so a non-quiet run can never crash on print.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except (OSError, ValueError):
+                pass
     args_list = list(argv if argv is not None else sys.argv[1:])
     if not args_list:
         ui.banner()
