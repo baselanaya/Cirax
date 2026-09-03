@@ -5,7 +5,7 @@ a = Analysis(
     ['desktop/cirax_app_entry.py'],
     pathex=['src'],
     binaries=[],
-    datas=[('src/cirax/data', 'cirax/data')],
+    datas=[('src/cirax/data', 'data')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

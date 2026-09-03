@@ -160,3 +160,18 @@ jobs:
           "$CIRAX" convert -q readme.pdf -t txt
           grep -qi cirax readme.txt
           echo "windows conversions ok"
+
+  gui-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgl1 libegl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+      - run: uv sync --group desktop
+      - name: build desktop app (onedir)
+        run: |
+          uv run pyinstaller --onedir --windowed --name cirax-app --clean --noconfirm \
+            --paths src --add-data "src/cirax/data:data" desktop/cirax_app_entry.py
+      - name: frozen app smoke (constructs every page)
+        run: |
+          QT_QPA_PLATFORM=offscreen CIRAX_SMOKE=1 dist/cirax-app/cirax-app

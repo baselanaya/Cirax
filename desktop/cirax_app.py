@@ -1006,3 +1006,19 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
+
+def main():
+    app = QApplication(sys.argv)
+    # CI smoke hook: construct the whole UI, report, exit — no event loop.
+    if os.environ.get("CIRAX_SMOKE"):
+        w = MainWindow()
+        print(f"cirax-app smoke ok: {w.stack.count()} pages, "
+              f"{w.target.count()} formats in picker")
+        return 0
+    win = MainWindow()
+    win.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

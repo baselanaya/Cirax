@@ -87,6 +87,12 @@ jobs:
           if (-not (Test-Path assets/cirax.ico)) {
             magick assets/cirax.svg -define icon:auto-resize=256,128,64,48,32,16 assets/cirax.ico
           }
+      - name: frozen app smoke
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          CIRAX_SMOKE: "1"
+        run: dist\cirax-app\cirax-app.exe
       - name: installer (Inno Setup)
         shell: pwsh
         run: |
