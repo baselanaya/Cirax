@@ -32,6 +32,8 @@ engines:
   - engine: imagemagick
     binary: magick
     package: imagemagick
+    search_windows:
+      - "%ProgramFiles%/ImageMagick*/magick.exe"
     install_windows: "scoop install imagemagick"
     description: Widest image format net (300+), PDF rasters included
     categories: [image]
@@ -172,6 +174,8 @@ engines:
   - engine: darktable-cli
     binary: darktable-cli
     package: darktable
+    search_windows:
+      - "%ProgramFiles%/darktable/bin/darktable-cli.exe"
     install_windows: "scoop install darktable"
     description: Camera RAW developer — highest-quality RAW conversion
     categories: [image]
@@ -202,6 +206,8 @@ engines:
   - engine: inkscape
     binary: inkscape
     package: inkscape
+    search_windows:
+      - "%ProgramFiles%/Inkscape/bin/inkscape.exe"
     install_windows: "scoop install inkscape"
     description: Vector hub — SVG to/from PDF, PNG, PS, EPS, EMF, WMF
     categories: [image, document]

@@ -4,6 +4,9 @@ engines:
   - engine: libreoffice
     binary: soffice
     package: libreoffice-still
+    search_windows:
+      - "%ProgramFiles%/LibreOffice/program/soffice.exe"
+      - "%ProgramFiles(x86)%/LibreOffice/program/soffice.exe"
     install_windows: "scoop bucket add extras && scoop install libreoffice"
     description: Office hub — word processor, sheets, slides to PDF/HTML/text
     categories: [document, spreadsheet, presentation]
@@ -64,6 +67,9 @@ engines:
   - engine: calibre
     binary: ebook-convert
     package: calibre
+    search_windows:
+      - "%ProgramFiles%/Calibre2/ebook-convert.exe"
+      - "%LOCALAPPDATA%/Programs/Calibre2/ebook-convert.exe"
     install_windows: "scoop install calibre"
     description: The ebook king — every reader format to every writer format
     categories: [ebook, document]

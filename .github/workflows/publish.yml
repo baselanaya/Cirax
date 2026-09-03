@@ -39,6 +39,68 @@ jobs:
       - name: publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 
+  linux-packages:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: install packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rpm file
+          mkdir -p packaging/tools
+          curl -sL -o packaging/tools/appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x packaging/tools/appimagetool
+      - name: build deb / rpm / AppImage
+        run: ./packaging/build_packages.sh
+      - name: attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/packages/*
+
+  windows:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: build CLI + desktop app
+        shell: pwsh
+        run: |
+          uv sync --group desktop
+          uv run pyinstaller --onefile --name cirax --clean --noconfirm `
+            --paths src --add-data "src/cirax/data;cirax/data" `
+            desktop/cirax_cli_entry.py
+          uv run pyinstaller --onedir --windowed --name cirax-app --clean --noconfirm `
+            --icon assets/cirax.ico `
+            --paths src --add-data "src/cirax/data;cirax/data" `
+            desktop/cirax_app_entry.py
+      - name: icon
+        shell: pwsh
+        run: |
+          if (-not (Test-Path assets/cirax.ico)) {
+            magick assets/cirax.svg -define icon:auto-resize=256,128,64,48,32,16 assets/cirax.ico
+          }
+      - name: installer (Inno Setup)
+        shell: pwsh
+        run: |
+          choco install -y --no-progress innosetup
+          $ver = "${{ github.ref_name }}".TrimStart("v")
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAPPVER=$ver packaging/windows/cirax.iss
+      - name: portable zip
+        shell: pwsh
+        run: |
+          $ver = "${{ github.ref_name }}".TrimStart("v")
+          Compress-Archive -Path dist/cirax.exe, dist/cirax-app -DestinationPath "dist/packages/cirax-$ver-win64-portable.zip"
+      - name: attach to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/packages/Cirax-Setup-*-win64.exe
+            dist/packages/cirax-*-win64-portable.zip
+
   npm:
     if: github.event_name == 'workflow_dispatch' && inputs.npm == true
     runs-on: ubuntu-latest

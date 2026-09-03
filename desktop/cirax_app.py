@@ -99,15 +99,18 @@ def child_env() -> dict[str, str]:
 
 
 def open_path(path: Path) -> None:
-    """Open with the system handler, but with a clean environment —
-    inside an AppImage, QDesktopServices children inherit bundle libs and
-    the viewer fails to read perfectly good files."""
+    """Open with the system handler. Inside an AppImage, QDesktopServices
+    children inherit bundle libraries and fail to read good files — so we
+    launch the platform opener with a scrubbed environment instead."""
     path = Path(path)
-    if shutil.which("xdg-open"):
-        subprocess.Popen(
-            ["xdg-open", str(path)], env=child_env(),
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            start_new_session=True)
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("LD_LIBRARY_PATH", "PYTHONPATH", "PYTHONHOME")}
+    if sys.platform == "win32":
+        os.startfile(str(path))  # noqa: S606 - shell-free, uses ShellExecute
+    elif shutil.which("xdg-open"):
+        subprocess.Popen(["xdg-open", str(path)], env=env,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
     else:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 

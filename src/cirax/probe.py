@@ -3,6 +3,8 @@ hardware acceleration. This is what `cirax doctor` is built on."""
 
 from __future__ import annotations
 
+import glob
+import os
 import re
 import shutil
 import subprocess
@@ -29,19 +31,57 @@ def engine_binary(engine: Engine) -> str:
     return engine.binary
 
 
+def _expand_windows(pattern: str) -> str:
+    """Expand %VAR% style env references used in registry search patterns."""
+    pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+    pf86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    lap = os.environ.get("LOCALAPPDATA", "")
+    out = (pattern.replace("%ProgramFiles(x86)%", pf86)
+                  .replace("%ProgramFiles%", pf)
+                  .replace("%LOCALAPPDATA%", lap))
+    return os.path.expandvars(out)
+
+
+def _search_windows(engine: Engine) -> str | None:
+    """Look for the engine executable in well-known install locations.
+
+    search_windows entries are absolute file patterns (wildcards allowed)
+    that may reference %ProgramFiles% / %ProgramFiles(x86)% /
+    %LOCALAPPDATA%. Covers installs that never land on PATH (LibreOffice,
+    Calibre, Ghostscript's app package, ...).
+    """
+    binary = engine_binary(engine)
+    expanded_dirs = []
+    for pattern in engine.search_windows:
+        expanded = _expand_windows(pattern)
+        matches = sorted(glob.glob(expanded), reverse=True)
+        if matches:
+            return matches[0]
+        expanded_dirs.append(os.path.dirname(expanded))
+    # pattern missed: try the platform binary name inside the same folders
+    for d in expanded_dirs:
+        cand = os.path.join(d, binary)
+        if os.path.isfile(cand):
+            return cand
+    return None
+
+
 def probe_engine(engine: Engine, timeout: int = 15) -> None:
     """Fill in installed/path/version for one engine (in place)."""
     binary = engine_binary(engine)
     path = shutil.which(binary)
+    if not path and sys.platform == "win32":
+        path = _search_windows(engine)
     if not path:
         return
     engine.installed = True
     engine.path = path
+    probe_binary = engine.path
     if not engine.probe_args:
         return
     try:
         out = subprocess.run(
-            [engine.binary, *engine.probe_args],
+            [probe_binary, *engine.probe_args],
             capture_output=True, text=True, timeout=timeout,
         )
         text = (out.stdout or "") + (out.stderr or "")

@@ -79,6 +79,9 @@ class Engine:
     sandbox: str = "default"  # "default" | "none" (needs local daemon/net)
     install_windows: str | None = None  # scoop/winget/pip hint for Windows
     binaries_windows: str | None = None  # Windows binary name (e.g. gswin64c)
+    search_windows: list[str] = field(default_factory=list)
+    # absolute file patterns (wildcards ok, %ProgramFiles%-style env vars
+    # expanded) for Windows installs that never land on PATH
     # filled in by the prober:
     installed: bool = False
     path: str | None = None
@@ -156,6 +159,7 @@ def _build_engine(d: dict) -> Engine:
         sandbox=d.get("sandbox", "default"),
         install_windows=d.get("install_windows"),
         binaries_windows=d.get("binaries_windows"),
+        search_windows=list(d.get("search_windows", [])),
     )
 
 

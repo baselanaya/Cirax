@@ -105,6 +105,8 @@ engines:
   - engine: mkvmerge
     binary: mkvmerge
     package: mkvtoolnix-cli
+    search_windows:
+      - "%ProgramFiles%/MKVToolNix/mkvmerge.exe"
     install_windows: "scoop install mkvtoolnix"
     description: Lossless Matroska container surgery (merge/split/extract)
     categories: [video, subtitle]

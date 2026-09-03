@@ -68,7 +68,8 @@ $ cirax convert scan.png text.txt
 | PyPI | `uv tool install cirax` (or `pipx install cirax`) |
 | curl | `curl -fsSL https://raw.githubusercontent.com/baselanaya/Cirax/main/install.sh \| sh` |
 | npm | `npm i -g @baselanaya/cirax` |
-| Desktop | grab the `.deb` / `.rpm` / `.AppImage` from [Releases](https://github.com/baselanaya/Cirax/releases) |
+| Windows | `Cirax-Setup-win64.exe` from [Releases](https://github.com/baselanaya/Cirax/releases) (desktop app + CLI) |
+| Desktop (Linux) | grab the `.deb` / `.rpm` / `.AppImage` from [Releases](https://github.com/baselanaya/Cirax/releases) |
 
 Cirax itself is tiny — the engines are your system packages. `cirax doctor
 --show-missing` prints exactly what to install.

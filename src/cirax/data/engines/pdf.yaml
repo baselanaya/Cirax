@@ -20,6 +20,8 @@ engines:
   - engine: ghostscript
     binary: gs
     package: ghostscript
+    search_windows:
+      - "%ProgramFiles%/gs/gs*/bin/gswin64c.exe"
     install_windows: "scoop install ghostscript"
     binaries_windows: gswin64c
     description: PDF/PostScript compression and rasterization

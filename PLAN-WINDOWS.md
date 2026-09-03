@@ -5,7 +5,7 @@ exe installer and winget, discovers engines from Windows package managers, and s
 first-class target in CI and releases — while staying 100% local and honest about what the
 platform can and cannot do.
 
-> Status: **plan** (not started). Target version: **v0.6.0** (v0.5.0 is reserved for the
+> Status: **W1–W3 shipped in v0.6.0** (Windows CI green, installer + portable zip on releases). Target version: **v0.6.0** (v0.5.0 is reserved for the
 > Linux polish batch). Everything here builds on the existing architecture — no fork, no
 > rewrite: the core is pure Python and the engines are already behind a declarative registry.
 
