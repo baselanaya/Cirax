@@ -7,6 +7,7 @@
 #error Pass /DAPPVER=x.y.z
 #endif
 
+[Setup]
 AppId={{7C1A2E64-9B3D-4F5A-8E2C-A1B2C3D4E5F6}}
 AppName=Cirax
 AppVersion={#AppVer}
