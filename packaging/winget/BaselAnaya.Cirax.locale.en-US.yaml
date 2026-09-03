@@ -1,0 +1,30 @@
+PackageIdentifier: BaselAnaya.Cirax
+PackageVersion: 0.6.2
+PackageLocale: en-US
+Publisher: Basel Anaya
+PublisherUrl: https://github.com/baselanaya
+PublisherSupportUrl: https://github.com/baselanaya/Cirax/issues
+Author: Basel Anaya
+PackageName: Cirax
+PackageUrl: https://github.com/baselanaya/Cirax
+License: MIT
+LicenseUrl: https://github.com/baselanaya/Cirax/blob/main/LICENSE
+Copyright: Copyright (c) 2026 Cirax contributors
+ShortDescription: Universal local conversion hub — every format to every format, fully offline
+Description: |-
+  Cirax turns your machine into a conversion hub. One command reaches every
+  format — it routes between the best local engines (FFmpeg, libvips,
+  ImageMagick, LibreOffice, Pandoc, Calibre, 7-Zip, qpdf, ...) and chains
+  them automatically. Files never leave your disk.
+Tags:
+  - convert
+  - converter
+  - image
+  - video
+  - audio
+  - pdf
+  - offline
+  - cli
+ReleaseNotesUrl: https://github.com/baselanaya/Cirax/releases/tag/v0.6.2
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

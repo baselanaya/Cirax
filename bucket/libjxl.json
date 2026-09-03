@@ -1,0 +1,26 @@
+{
+    "version": "0.12.0",
+    "description": "JPEG XL image format reference tools (cjxl compressor, djxl decoder)",
+    "homepage": "https://libjxl.github.io/",
+    "license": "BSD-3-Clause",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/libjxl/libjxl/releases/download/v0.12.0/jxl-x64-windows.zip",
+            "hash": "4ee3f72134a2a49774c357f2bffecf30d752d702147896c493578789de15a97c",
+            "extract_dir": "x64-windows/bin"
+        }
+    },
+    "bin": [
+        "cjxl.exe",
+        "djxl.exe"
+    ],
+    "checkver": "github",
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/libjxl/libjxl/releases/download/v$version/jxl-x64-windows.zip",
+                "extract_dir": "x64-windows/bin"
+            }
+        }
+    }
+}

@@ -94,6 +94,7 @@ engines:
   - engine: avifenc
     binary: avifenc
     package: libavif
+    install_windows: "scoop bucket add cirax https://github.com/baselanaya/Cirax; scoop install cirax/libavif"
     description: Reference AVIF encoder
     categories: [image]
     probe: {args: [--version], version_regex: 'Version: v?([^\s]+)'}
@@ -107,6 +108,7 @@ engines:
   - engine: cjxl
     binary: cjxl
     package: libjxl
+    install_windows: "scoop bucket add cirax https://github.com/baselanaya/Cirax; scoop install cirax/libjxl"
     description: Reference JPEG XL encoder
     categories: [image]
     probe: {args: [--version], version_regex: 'cjxl v([^\s]+)'}
@@ -120,6 +122,7 @@ engines:
   - engine: djxl
     binary: djxl
     package: libjxl
+    install_windows: "scoop bucket add cirax https://github.com/baselanaya/Cirax; scoop install cirax/libjxl"
     description: Reference JPEG XL decoder
     categories: [image]
     probe: {args: [--version], version_regex: 'djxl v([^\s]+)'}
@@ -254,6 +257,7 @@ engines:
   - engine: vtracer
     binary: vtracer
     package: vtracer
+    install_windows: "scoop bucket add cirax https://github.com/baselanaya/Cirax; scoop install cirax/vtracer"
     description: Full-color bitmap-to-vector tracer
     categories: [image]
     probe: {args: [--version], version_regex: '([^\s]+)'}
