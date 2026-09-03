@@ -119,6 +119,7 @@ class Route:
     output_from: str | None = None  # "stdout": capture engine stdout as output
     ops: bool = False  # same-format operation (strip metadata, line endings)
     post: str | None = None  # post-process captured stdout: "strip_fences"
+    stdin_from: str | None = None  # "input": pipe the input file to stdin
 
     def matches_input(self, fmt: str) -> bool:
         if "*" in self.from_formats:
@@ -155,6 +156,7 @@ class Engine:
     probe_args: list[str] = field(default_factory=list)
     version_regex: str = ""
     package: str | None = None
+    install_linux: str | None = None  # non-pacman hint (binary release, pip)
     note: str | None = None
     setup_hint: str | None = None  # shown by doctor when binary present but
     # the engine needs one-time setup (e.g. pulling a model)
@@ -223,6 +225,7 @@ def _build_route(d: dict) -> Route:
         output_from=d.get("output_from"),
         ops=bool(d.get("ops", False)),
         post=d.get("post"),
+        stdin_from=d.get("stdin_from"),
     )
 
 
@@ -236,6 +239,7 @@ def _build_engine(d: dict) -> Engine:
         probe_args=list(probe.get("args", [])),
         version_regex=probe.get("version_regex", ""),
         package=d.get("package"),
+        install_linux=d.get("install_linux"),
         note=d.get("note"),
         setup_hint=d.get("setup_hint"),
         routes=[_build_route(r) for r in d.get("routes", [])],

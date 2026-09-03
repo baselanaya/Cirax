@@ -86,7 +86,8 @@ def apply_preset(step: Step, preset: str | None) -> Step:
 
 def _builtin(name: str, *, src: Path, dst: Path, outdir: Path, to_fmt: str,
              ext_for, pages: tuple[int, int | None], pattern: Path,
-             printf: Path, workdir: Path) -> str | None:
+             printf: Path, workdir: Path, data_dir: Path,
+             models_dir: Path) -> str | None:
     if name == "input":
         return str(src)
     if name == "output":
@@ -107,6 +108,10 @@ def _builtin(name: str, *, src: Path, dst: Path, outdir: Path, to_fmt: str,
         return str(pages[1] if pages[1] else 9999999)
     if name == "workdir":
         return str(workdir)
+    if name == "data_dir":
+        return str(data_dir)   # bundled cirax data (helper scripts, ...)
+    if name == "models_dir":
+        return str(models_dir)  # ~/.local/state|share per platform + /models
     return None
 
 
@@ -126,10 +131,30 @@ def render_args(step: Step, *, src: Path, dst: Path, outdir: Path,
     if template is None:
         raise ConversionError(f"engine '{step.engine.name}' has no command template")
 
+def render_args(step: Step, *, src: Path, dst: Path, outdir: Path,
+                ext_for, pages: tuple[int, int | None] = (1, None),
+                multipage: bool = False, workdir: Path | None = None,
+                data_dir: Path | None = None,
+                models_dir: Path | None = None) -> list[str]:
+    """Turn a command template into an argv list.
+
+    Templates are tokenized first, then placeholders are substituted per
+    token — so paths with spaces stay single arguments and flag strings
+    (e.g. "-c:v libx264 -crf 20") expand into multiple args.
+    """
+    route = step.route
+    to_fmt = step.to_format
+    template = route.command_multipage if (multipage and route.command_multipage) \
+        else route.command
+    if template is None:
+        raise ConversionError(f"engine '{step.engine.name}' has no command template")
+
     stem = dst.with_suffix("").name
     pattern = outdir / stem  # e.g. outdir/page  -> page-1.png, page-2.png
     printf = outdir / f"{stem}-%02d"  # printf-style for gs -sOutputFile
     workdir = workdir if workdir is not None else outdir.parent
+    data_dir = data_dir if data_dir is not None else outdir
+    models_dir = models_dir if models_dir is not None else outdir
 
     tokens = shlex.split(template or "")
     argv: list[str] = []
@@ -146,7 +171,8 @@ def render_args(step: Step, *, src: Path, dst: Path, outdir: Path,
         for name in names:
             builtin = _builtin(name, src=src, dst=dst, outdir=outdir,
                                to_fmt=to_fmt, ext_for=ext_for, pages=pages,
-                               pattern=pattern, printf=printf, workdir=workdir)
+                               pattern=pattern, printf=printf, workdir=workdir,
+                               data_dir=data_dir, models_dir=models_dir)
             if builtin is None:
                 value = route.var_for(name, to_fmt=to_fmt, from_fmt=None)
                 if value is not None:
@@ -175,10 +201,12 @@ def _child_env() -> dict[str, str]:
     return env
 
 
-def _run(argv: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess:
+def _run(argv: list[str], *, cwd: Path | None = None,
+         input_data: bytes | None = None) -> subprocess.CompletedProcess:
     try:
         proc = subprocess.run(argv, cwd=cwd, capture_output=True, text=True,
-                              timeout=1800, env=_child_env())
+                              timeout=1800, env=_child_env(),
+                              input=input_data)
     except FileNotFoundError:
         raise ConversionError(f"engine binary not found: {argv[0]}")
     except subprocess.TimeoutExpired:
@@ -275,6 +303,10 @@ def execute(plan: Plan, reg: Registry, src_path: Path, dst_path: Path,
         cleanup = True
     workdir.mkdir(parents=True, exist_ok=True)
     page_range = _parse_pages(pages)
+    from importlib.resources import files
+    from .paths import state_dir
+    data_dir = Path(str(files("cirax") / "data"))
+    models_dir = state_dir() / "models"
 
     results: list[StepResult] = []
     current: Path = src_path
@@ -300,7 +332,8 @@ def execute(plan: Plan, reg: Registry, src_path: Path, dst_path: Path,
             outdir.mkdir(parents=True, exist_ok=True)
             argv = render_args(step, src=current, dst=out, outdir=outdir,
                                ext_for=reg.ext_for, pages=page_range,
-                               multipage=do_multipage, workdir=workdir)
+                               multipage=do_multipage, workdir=workdir,
+                               data_dir=data_dir, models_dir=models_dir)
             # per-platform binary name (e.g. Ghostscript: gs / gswin64c)
             argv[0] = engine_binary(step.engine)
             try:
@@ -323,7 +356,10 @@ def execute(plan: Plan, reg: Registry, src_path: Path, dst_path: Path,
                 if proc.returncode != 0:
                     raise ConversionError(_step_error(step, proc))
             else:
-                proc = _run(argv, cwd=cwd)
+                stdin_text = None
+                if step.route.stdin_from == "input":
+                    stdin_text = current.read_text(errors="replace")
+                proc = _run(argv, cwd=cwd, input_data=stdin_text)
                 if proc.returncode != 0:
                     raise ConversionError(_step_error(step, proc))
 

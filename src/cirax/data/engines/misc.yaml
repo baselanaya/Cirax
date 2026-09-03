@@ -44,10 +44,29 @@ engines:
   - engine: blender
     binary: blender
     package: blender
-    description: High-fidelity 3D hub (blend/gltf/fbx/obj/stl/dae/abc/usd)
+    description: High-fidelity 3D hub — .blend to glTF/FBX/OBJ/STL/PLY via headless export
     categories: [model3d]
-    note: headless adapter (blender -b with embedded python) pending (Phase 3)
-    probe: {args: [--version], version_regex: 'Blender ([^\s]+)'}
+    probe:
+      args: [--version]
+      version_regex: 'Blender ([^\s]+)'
+    routes:
+      - from: [model/x-blend]
+        to: [model/gltf-binary, model/gltf+json, model/fbx, model/obj,
+             model/stl, model/ply]
+        lossless: false
+        priority: 95
+        note: scene is exported with default settings; assimp covers the rest
+        command: >-
+          blender --background {input} --python {data_dir}/blender/cirax_export.py
+          -- {outfmt} {output}
+        vars:
+          outfmt:
+            model/gltf-binary: GLB
+            model/gltf+json: GLTF
+            model/fbx: FBX
+            model/obj: OBJ
+            model/stl: STL
+            model/ply: PLY
 
   - engine: fonttools
     binary: fonttools
@@ -101,8 +120,24 @@ engines:
 
   - engine: piper
     binary: piper
-    package: piper-tts-bin
-    description: Offline text-to-speech (TXT to WAV)
+    install_linux: >-
+      piper: get the binary from github.com/rhasspy/piper/releases and a voice
+      from huggingface.co/rhasspy/piper-voices into
+      ~/.local/state/cirax/models/piper/ (see docs/ENGINES.md)
+    description: Offline text-to-speech (TXT to WAV) via the rhasspy piper CLI
     categories: [audio]
-    note: requires local voice models; adapter pending (Phase 3)
-    probe: {}
+    setup_hint: >-
+      download a voice model into ~/.local/state/cirax/models/piper/
+      (e.g. en_US-lessac-medium.onnx + .onnx.json from
+      huggingface.co/rhasspy/piper-voices) — then convert any .txt to .wav
+    probe: {args: [--help], version_regex: 'piper'}
+    routes:
+      - from: [text/plain, text/markdown]
+        to: [audio/x-wav]
+        lossless: false
+        priority: 80
+        stdin_from: input
+        output_from: none
+        note: uses the en_US-lessac voice under {models_dir}/piper/; drop any
+              piper voice (.onnx + .onnx.json) there and edit the spec to use it
+        command: "piper -m {models_dir}/piper/en_US-lessac-medium.onnx -f {output} -q"
