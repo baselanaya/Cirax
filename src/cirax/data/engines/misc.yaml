@@ -45,6 +45,14 @@ engines:
   - engine: blender
     binary: blender
     package: blender
+    install_windows: "winget install BlenderFoundation.Blender"
+    install_macos: "brew install --cask blender"
+    binaries_windows: blender.exe
+    search_windows:
+      - "%ProgramFiles%\\Blender Foundation\\Blender *\\blender.exe"
+      - "%LOCALAPPDATA%\\Programs\\Blender Foundation\\Blender *\\blender.exe"
+    search_macos:
+      - "/Applications/Blender.app/Contents/MacOS/Blender"
     description: High-fidelity 3D hub — .blend to glTF/FBX/OBJ/STL/PLY via headless export
     categories: [model3d]
     probe:
@@ -122,6 +130,19 @@ engines:
 
   - engine: piper
     binary: piper
+    binaries_windows: piper.exe
+    search_windows:
+      - "%LOCALAPPDATA%\\Programs\\piper\\piper.exe"
+    install_windows: >-
+      download piper_windows_amd64.zip from
+      github.com/rhasspy/piper/releases, extract piper.exe to a PATH folder,
+      and a voice model into %LOCALAPPDATA%\Cirax\models\piper\
+      (see docs/ENGINES.md)
+    install_macos: >-
+      download piper_macos_x86_64.tar.gz from
+      github.com/rhasspy/piper/releases and a voice from
+      huggingface.co/rhasspy/piper-voices into
+      ~/Library/Application Support/Cirax/models/piper/ (see docs/ENGINES.md)
     install_linux: >-
       piper: get the binary from github.com/rhasspy/piper/releases and a voice
       from huggingface.co/rhasspy/piper-voices into

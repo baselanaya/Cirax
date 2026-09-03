@@ -176,6 +176,35 @@ def make_handler(reg, args):
                      "version": e.version, "categories": e.categories}
                     for e in reg.engines
                 ])
+            elif self.path == "/api/domains":
+                self._json([
+                    {"domain": dom,
+                     "formats": sum(1 for f in reg.formats.values()
+                                    if f.domain == dom
+                                    and f.mime != "application/x-tree")}
+                    for dom in sorted({f.domain for f in reg.formats.values()
+                                       if f.mime != "application/x-tree"})])
+            elif self.path.startswith("/api/plan"):
+                import urllib.parse
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                src = qs.get("from", [""])[0]
+                dst = qs.get("to", [""])[0]
+                if not src or not dst:
+                    self._json({"error": "pass ?from=<mime>&to=<mime>"}, 400)
+                    return
+                plan = find_plan(reg, src, dst)
+                if plan is None:
+                    self._json({"error": f"no route from {src} to {dst}"}, 404)
+                    return
+                self._json({
+                    "from": plan.src, "to": plan.dst,
+                    "lossless": plan.lossless,
+                    "engines": plan.engines,
+                    "steps": [{"engine": s.engine.name,
+                               "binary": s.engine.binary,
+                               "target": s.to_format,
+                               "lossless": s.lossless}
+                              for s in plan.steps]})
             else:
                 self._json({"error": "not found"}, 404)
 

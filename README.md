@@ -62,6 +62,8 @@ $ cirax convert scan.png text.txt
   jail: no network, read-only filesystem, writes confined to the workspace.
 - **Local AI OCR** — [GLM-OCR](https://huggingface.co/zai-org/GLM-OCR) (MIT,
   ~1.3B params) via Ollama: layout-aware text + Markdown, zero cloud.
+- **Blender & Piper engines** — `.blend` → GLB/FBX/OBJ/STL/PLY headless, and
+  offline text-to-speech (see [docs/ENGINES.md](docs/ENGINES.md))
 - **Same-format ops** — strip EXIF/GPS, fix line endings, transcode charsets.
 - **Watch & serve** — convert folders as files land in them, or drive it from
   a local web UI / plain curl.
