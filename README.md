@@ -90,7 +90,7 @@ Optional daemon: corrects your webcam feed so your eyes read as camera-facing wh
 ## Linux notes
 
 - The overlay runs under XWayland by default; Wayland screen capture goes through the PipeWire portal (`WebRTCPipeWireCapturer` is enabled automatically).
-- **The overlay is hidden from your taskbar and Alt+Tab, but NOT from screen shares on Linux** — the app tells you this at startup. There is no OS mechanism (X11 or Wayland) for per-window capture exclusion yet.
+- **The overlay is hidden from your taskbar, but NOT from screen shares on Linux** — the app tells you this at startup. There is no OS mechanism (X11 or Wayland) for per-window capture exclusion yet.
 - Some distros print `Fontconfig warning` lines at launch from Chromium's bundled fontconfig — harmless noise, not a Cirax error.
 
 ## License

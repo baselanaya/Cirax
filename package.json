@@ -1,6 +1,6 @@
 {
   "name": "cirax",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Cirax \u2014 an open-source invisible AI copilot: screen, mic and meeting audio into your own LLM. BYOK, self-hosted, hidden from screen shares.",
   "license": "GPL-3.0-or-later",
   "author": "Basel Anaya",

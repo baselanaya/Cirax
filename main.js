@@ -296,12 +296,14 @@ function createWindow() {
     }
   };
 
-  // Fix 1: type:'toolbar' removes the window from the taskbar AND Alt+Tab.
-  //  - Windows: sets WS_EX_TOOLWINDOW.
-  //  - Linux (X11/XWayland): sets _NET_WM_WINDOW_TYPE_TOOLBAR, which KDE/GNOME
-  //    taskbars and window pickers honour.
-  //  - macOS: not needed (dock hiding + Mission Control handle it).
-  if (isWindows || isLinux) {
+  // Fix 1: On Windows, type:'toolbar' sets WS_EX_TOOLWINDOW — removes the
+  // window from Alt+Tab AND the taskbar entirely.
+  // Do NOT set this on Linux: KWin treats toolbar-type windows as passive
+  // utility panels — the overlay renders but refuses all input (v0.2.0
+  // regression: no clicks, no close). skipTaskbar below already hides it
+  // from the Linux taskbar.
+  // On macOS, this is not needed (dock hiding + Mission Control handle it).
+  if (isWindows) {
     winOptions.type = 'toolbar';
   }
 
@@ -326,8 +328,8 @@ function createWindow() {
     const session = String(process.env.XDG_SESSION_TYPE || process.env.ELECTRON_OZONE_PLATFORM_HINT || '').toLowerCase();
     const wayland = session.includes('wayland');
     const msg = wayland
-      ? 'Linux/Wayland: the overlay is hidden from your taskbar and Alt+Tab, but NOT from screen shares — the compositor captures the whole screen and offers no per-window exclusion yet.'
-      : 'Linux/X11: the overlay is hidden from your taskbar, Alt+Tab and window pickers, but full-screen captures and shares still include it.';
+      ? 'Linux/Wayland: the overlay is hidden from your taskbar, but NOT from screen shares — the compositor captures the whole screen and offers no per-window exclusion yet.'
+      : 'Linux/X11: the overlay is hidden from your taskbar, but full-screen captures and shares still include it.';
     win.webContents.on('did-finish-load', () => {
       if (!win.isDestroyed()) win.webContents.send('status', { message: msg });
     });
