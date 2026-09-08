@@ -1,10 +1,16 @@
 <div align="center">
 
-# Cirax
+<img src="docs/banner.svg" alt="Cirax — your invisible AI copilot" width="100%"/>
+
+[![CI](https://github.com/baselanaya/Cirax/actions/workflows/ci.yml/badge.svg)](https://github.com/baselanaya/Cirax/actions/workflows/ci.yml)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-3D6FD8.svg)]()
 
 **An invisible AI copilot that floats over your screen — sees what you see, hears your meetings, and stays hidden from screen shares.**
 
 BYOK: OpenAI · Anthropic · Google Gemini · any OpenAI-compatible endpoint. Free and self-hosted.
+
+<img src="docs/screenshot.png" alt="Cirax overlay in action" width="560"/>
 
 </div>
 
@@ -70,6 +76,10 @@ Open the settings (gear) and add **any one** of:
 - **Azure AI Foundry** endpoint + key
 
 Optional: a **Deepgram** key for cloud streaming transcription, or enable **local Whisper** for fully offline speech-to-text.
+
+## Camera companion (eye-contact mode)
+
+Optional daemon: corrects your webcam feed so your eyes read as camera-facing while you read Cirax's answers on screen, and publishes it as a **Cirax Camera** virtual webcam that Zoom / Meet / Teams pick up like any camera. Enable it in **Settings → Camera** (one-time setup in [companion/README.md](companion/README.md)). Powered by [MobileGaze](https://github.com/yakhyo/gaze-estimation) (MIT, 4.8 MB) running locally at ~7 ms/frame; a geometric fallback works without the model.
 
 ## Privacy
 

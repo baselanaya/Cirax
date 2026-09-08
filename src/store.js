@@ -21,6 +21,14 @@ const DEFAULTS = {
   smart: false,
   baseUrl: '',
   captureMode: 'screen',
+  // Camera companion daemon (eye-contact correction). Linux virtual camera.
+  companion: {
+    enabled: false,     // auto-start the daemon with the app
+    strength: 0.7,      // 0..1 — how aggressively the eyes are corrected
+    input: '/dev/video0',
+    output: '/dev/video10',
+    preview: false      // show the daemon's live preview window
+  },
   minimaxRegion: 'global_en',
   apiKeys: { openai: '', anthropic: '', gemini: '', deepgram: '', custom: '', ollama: '', groq: '', minimax: '' , azure: '' },
   azureEndpoint: '',

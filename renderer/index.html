@@ -108,6 +108,7 @@
       <div class="s-tabs">
         <button class="s-tab on" data-tab="keys">🔑 Keys</button>
         <button class="s-tab" data-tab="transcription">Audio</button>
+        <button class="s-tab" data-tab="camera">🎥 Camera</button>
         <button class="s-tab" data-tab="profile">📄 Profile</button>
         <button class="s-tab" data-tab="prep">🎯 Interview Prep</button>
         <button class="s-tab" data-tab="style">✨ Style</button>
@@ -219,6 +220,39 @@
         </div>
 
         <div class="s-status" id="whisper-status"></div>
+      </div>
+
+      <!-- Tab: Camera (eye-contact companion) -->
+      <div class="s-body s-tab-pane hidden" data-pane="camera">
+        <div class="whisper-card">
+          <div class="whisper-runtime-row">
+            <span class="s-label">Eye-contact camera</span>
+            <span id="companion-runtime-status" class="whisper-badge">Idle</span>
+          </div>
+          <div class="s-note">Corrects your webcam feed so your eyes read as camera-facing while you read Cirax's answers, then publishes it as a <strong>Cirax Camera</strong> virtual device that Zoom / Meet / Teams select like any webcam. Frames never leave this machine.</div>
+
+          <label class="s-label">Daemon</label>
+          <div class="s-actions" style="display:flex; gap:8px;">
+            <button id="companion-start" class="s-action">Start</button>
+            <button id="companion-stop" class="s-action">Stop</button>
+            <span id="companion-model-badge" class="whisper-badge"></span>
+          </div>
+
+          <label class="s-label">Correction strength <span class="s-hint">subtle → obvious</span></label>
+          <input id="companion-strength" type="range" min="0" max="1" step="0.05" style="width:100%;" />
+
+          <label class="s-label">Webcam device</label>
+          <div class="s-field"><span>Input</span><input id="companion-input" type="text" placeholder="/dev/video0" autocomplete="off" spellcheck="false" /></div>
+
+          <label class="s-label">Live preview window</label>
+          <div class="s-seg" id="companion-preview-seg">
+            <button data-preview="off">Off</button>
+            <button data-preview="on">On (next start)</button>
+          </div>
+
+          <div class="s-note" id="companion-setup-note"></div>
+        </div>
+        <div class="s-status" id="companion-status"></div>
       </div>
 
       <!-- Tab: Profile -->

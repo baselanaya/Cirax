@@ -1287,6 +1287,14 @@
     const localWhisper = settings.localWhisper || { modelId: 'base.en', language: 'auto', threads: 0 };
     $('#whisper-language').value = localWhisper.language || 'auto';
     $('#whisper-threads').value = Number(localWhisper.threads) || 0;
+    // Camera tab
+    const companion = settings.companion || {};
+    $('#companion-strength').value = companion.strength !== undefined ? companion.strength : 0.7;
+    $('#companion-input').value = companion.input || '/dev/video0';
+    document.querySelectorAll('#companion-preview-seg button').forEach((button) => {
+      button.classList.toggle('on', (companion.preview ? 'on' : 'off') === button.dataset.preview);
+    });
+    renderCompanionSetupNote();
     // Profile tab
     $('#resume-text').value = settings.resumeText || '';
     $('#job-description').value = settings.jobDescription || '';
@@ -1395,6 +1403,55 @@
     });
     $('#s-status').textContent = statusText();
   }));
+
+  document.querySelectorAll('#companion-preview-seg button').forEach((button) => button.addEventListener('click', () => {
+    if (!settings.companion) settings.companion = {};
+    settings.companion.preview = button.dataset.preview === 'on';
+    document.querySelectorAll('#companion-preview-seg button').forEach((candidate) => candidate.classList.toggle('on', candidate === button));
+  }));
+
+  // ---- camera companion ---------------------------------------------------
+  function renderCompanionStatus(st) {
+    const badge = $('#companion-runtime-status');
+    if (!badge) return;
+    const modelBadge = $('#companion-model-badge');
+    const running = !!(st && st.running);
+    badge.textContent = running ? 'Running' : (st && st.error ? 'Stopped' : 'Idle');
+    badge.classList.toggle('ready', running);
+    badge.classList.toggle('error', !running && !!(st && st.error));
+    if (modelBadge) modelBadge.textContent = running ? (st.model || '') : '';
+    const statusLine = $('#companion-status');
+    if (statusLine) statusLine.textContent = (st && st.error) ? st.error : '';
+    const startBtn = $('#companion-start');
+    const stopBtn = $('#companion-stop');
+    if (startBtn) startBtn.disabled = running;
+    if (stopBtn) stopBtn.disabled = !running;
+  }
+
+  function renderCompanionSetupNote() {
+    const note = $('#companion-setup-note');
+    if (!note) return;
+    if (cirax.platform !== 'linux') {
+      note.innerHTML = 'The virtual-camera daemon is Linux-only (v4l2loopback). On this OS you can still run it in file mode from a terminal: <code>python gaze_cam.py --input face.jpg --output out.mp4</code>.';
+    } else {
+      note.innerHTML = 'One-time setup: <code>sudo modprobe v4l2loopback video_nr=10 card_label="Cirax Camera" exclusive_caps=1</code> · for the neural gaze estimator run <code>sh companion/fetch-gaze-model.sh</code>.';
+    }
+  }
+
+  $('#companion-start').addEventListener('click', async () => {
+    await saveSettings(); // pick up strength / device / preview before starting
+    renderCompanionStatus(await cirax.companionStart({
+      strength: settings.companion && settings.companion.strength,
+      input: settings.companion && settings.companion.input,
+      preview: settings.companion && settings.companion.preview,
+    }));
+  });
+  $('#companion-stop').addEventListener('click', async () => {
+    await cirax.companionStop();
+    renderCompanionStatus({ running: false });
+  });
+  cirax.on('companion-status', (st) => renderCompanionStatus(st));
+  cirax.companionStatus().then(renderCompanionStatus).catch(() => {});
 
   function formatBytes(bytes) {
     if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB';
@@ -1557,6 +1614,12 @@
     settings.localWhisper.modelId = $('#whisper-model').value || settings.localWhisper.modelId || 'base.en';
     settings.localWhisper.language = $('#whisper-language').value || 'auto';
     settings.localWhisper.threads = Math.max(0, Math.min(64, Number.parseInt($('#whisper-threads').value, 10) || 0));
+    // Camera tab
+    if (!settings.companion) settings.companion = {};
+    settings.companion.strength = Math.max(0, Math.min(1, Number($('#companion-strength').value) || 0));
+    settings.companion.input = $('#companion-input').value.trim() || '/dev/video0';
+    const previewSel = document.querySelector('#companion-preview-seg button.on');
+    settings.companion.preview = !!(previewSel && previewSel.dataset.preview === 'on');
     // Profile
     settings.resumeText = $('#resume-text').value.trim();
     settings.jobDescription = $('#job-description').value.trim();

@@ -6,6 +6,7 @@ if (process.platform === 'linux') {
   app.commandLine.appendSwitch('enable-features', 'WebRTCPipeWireCapturer');
 }
 const path = require('path');
+const fs = require('fs');
 const os = require('os');
 const store = require('./src/store');
 const { captureScreenshot } = require('./src/screen');
@@ -54,6 +55,78 @@ const WIN_BUILD = getWindowsBuild();
 const WIN_SUPPORTS_CONTENT_PROTECTION = !isWindows || WIN_BUILD >= 19041;
 
 let permWin = null;
+
+// -------- camera companion (eye-contact daemon) --------
+// Spawns companion/gaze_cam.py (MediaPipe + MobileGaze ONNX) against the local
+// venv and publishes the corrected feed to a v4l2loopback device. Linux-only
+// for virtual-camera output; on other platforms the section renders disabled
+// with an honest note (file mode still works via the CLI).
+const { spawn } = require('child_process');
+let companionProc = null;
+let companionStatus = { running: false, model: null, output: null, error: null };
+
+function companionPython() {
+  if (isWindows) return null; // venv layout differs; GUI companion is Linux-only for now
+  const venvPy = path.join(__dirname, 'companion', '.venv', 'bin', 'python');
+  return fs.existsSync(venvPy) ? venvPy : null;
+}
+
+function companionModelAvailable() {
+  return fs.existsSync(path.join(__dirname, 'companion', 'models', 'gaze.onnx'));
+}
+
+function sendCompanionStatus() {
+  if (win && !win.isDestroyed()) win.webContents.send('companion-status', companionStatus);
+}
+
+async function companionStart(overrides = {}) {
+  if (companionProc) return companionStatus;
+  const cfg = (store.getSettings().companion || {});
+  const py = companionPython();
+  if (!py) {
+    companionStatus = { running: false, model: null, output: null,
+      error: 'companion venv not found — run: cd companion && uv venv && uv pip install -r requirements.txt' };
+    sendCompanionStatus();
+    return companionStatus;
+  }
+  const input = overrides.input || cfg.input || '/dev/video0';
+  const output = cfg.output || '/dev/video10';
+  const args = [
+    path.join(__dirname, 'companion', 'gaze_cam.py'),
+    '--input', input,
+    '--output', output,
+    '--strength', String(overrides.strength !== undefined ? overrides.strength : (cfg.strength !== undefined ? cfg.strength : 0.7)),
+  ];
+  if (companionModelAvailable()) args.push('--gaze-model', 'auto');
+  if (overrides.preview || cfg.preview) args.push('--preview');
+
+  companionStatus = { running: true, model: companionModelAvailable() ? 'starting (neural)' : 'starting (geometric)', output, error: null };
+  sendCompanionStatus();
+  companionProc = spawn(py, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  companionProc.stdout.on('data', (d) => {
+    const line = String(d);
+    if (line.includes('gaze model:')) companionStatus.model = line.includes('gaze.onnx') ? 'MobileGaze (neural)' : 'geometric';
+    else if (line.includes('geometric fallback')) companionStatus.model = 'geometric';
+    sendCompanionStatus();
+  });
+  companionProc.stderr.on('data', () => { /* mediapipe/ffmpeg chatter — surfaced only on failure */ });
+  companionProc.on('exit', (code) => {
+    companionProc = null;
+    companionStatus = { running: false, model: null, output: null,
+      error: code && code !== 0 ? `companion exited with code ${code} (is the device busy?)` : null };
+    sendCompanionStatus();
+  });
+  return companionStatus;
+}
+
+function companionStop() {
+  if (!companionProc) return;
+  const proc = companionProc;
+  companionProc = null;
+  try { proc.kill('SIGTERM'); } catch { /* already gone */ }
+  companionStatus = { running: false, model: null, output: null, error: null };
+  sendCompanionStatus();
+}
 
 // -------- capture / transcript state --------
 const state = { capturing: false, busy: false, transcribing: { you: false, them: false } };
@@ -214,6 +287,7 @@ function createWindow() {
     skipTaskbar: true,
     alwaysOnTop: true,
     fullscreenable: false,
+    icon: path.join(__dirname, 'build-resources', 'icon.png'), // Linux window icon
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -591,6 +665,9 @@ async function runFeature(mode, userText) {
 // -------- IPC --------
 ipcMain.handle('settings:get', () => store.getSettings());
 ipcMain.handle('settings:set', (_e, patch) => { sttDisabled = false; return store.setSettings(patch); });
+ipcMain.handle('companion:start', (_e, overrides) => companionStart(overrides || {}));
+ipcMain.handle('companion:stop', () => companionStop());
+ipcMain.handle('companion:status', () => companionStatus);
 ipcMain.handle('capture:toggle', () => {
   const targetState = !desiredCaptureState;
   desiredCaptureState = targetState;
@@ -776,6 +853,7 @@ function createPermissionsWindow() {
     resizable: false,
     skipTaskbar: false,
     fullscreenable: false,
+    icon: path.join(__dirname, 'build-resources', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -831,6 +909,10 @@ function launchApp() {
 
 // -------- lifecycle --------
 app.whenReady().then(async () => {
+  // Camera companion: auto-start if the user enabled it (Linux only).
+  if (isLinux && (store.getSettings().companion || {}).enabled) {
+    companionStart();
+  }
   if (isWindows) {
     // Windows stealth: process shows as an OS update helper.
     app.setName('MicrosoftEdgeUpdate');
@@ -853,6 +935,7 @@ app.whenReady().then(async () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  companionStop();
   // Best effort, deliberately not blocking the quit: the library also removes
   // the instance file from a `process.on('exit')` handler, and a file left
   // behind is harmless anyway because readers check whether the PID is alive.
