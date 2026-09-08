@@ -93,7 +93,6 @@ Optional daemon: corrects your webcam feed so your eyes read as camera-facing wh
 - **The overlay is hidden from your taskbar and Alt+Tab, but NOT from screen shares on Linux** — the app tells you this at startup. There is no OS mechanism (X11 or Wayland) for per-window capture exclusion yet.
 - Some distros print `Fontconfig warning` lines at launch from Chromium's bundled fontconfig — harmless noise, not a Cirax error.
 
-## Credits & license
+## License
 
-GPL-3.0-or-later. Maintained by Basel Anaya. Contains code derived from
-[cue](https://github.com/Blueturboguy07/cue) (GPL-3.0).
+GPL-3.0-or-later. Maintained by Basel Anaya.
