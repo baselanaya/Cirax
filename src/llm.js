@@ -132,7 +132,16 @@ function stripDataUrl(dataUrl) {
   return m ? { mime: m[1], b64: m[2] } : null;
 }
 
-async function streamOpenAI({ apiKey, baseURL, model, system, turns, imageDataUrl, maxTokens, onToken, provider }) {
+// Z.ai's OpenAI-compatible gateways (GLM-4.5+) are reasoning models: hidden
+// `reasoning_content` streams before `content` and counts against max_tokens.
+// Without an explicit `thinking` switch, the fast tier can burn its whole
+// token budget reasoning and never emit a visible character. Only sent to
+// hosts we know accept it, so other OpenAI-compatible servers are unaffected.
+function isZaiGateway(baseURL) {
+  return /^https?:\/\/api\.(z\.ai|bigmodel\.cn)(:|\/)/i.test(String(baseURL || ''));
+}
+
+async function streamOpenAI({ apiKey, baseURL, model, system, turns, imageDataUrl, maxTokens, onToken, provider, thinking }) {
   const OpenAI = require('openai');
   const client = new OpenAI(baseURL ? { apiKey, baseURL } : { apiKey });
   const messages = [{ role: 'system', content: system }];
@@ -149,9 +158,18 @@ async function streamOpenAI({ apiKey, baseURL, model, system, turns, imageDataUr
       messages.push({ role: t.role, content: t.text });
     }
   });
+  // Smart tier keeps reasoning (better answers) with headroom so the visible
+  // answer is not truncated by the hidden reasoning budget; fast tier turns
+  // it off so the overlay answers immediately.
+  let effectiveMaxTokens = maxTokens;
+  if (isZaiGateway(baseURL)) {
+    if (thinking === 'enabled') effectiveMaxTokens = Math.max(maxTokens, 3000);
+    else if (thinking === 'disabled') effectiveMaxTokens = maxTokens;
+  }
   const stream = await client.chat.completions.create({
-    model, messages, stream: true, max_tokens: maxTokens,
-    ...(baseURL ? {} : { stream_options: { include_usage: true } })
+    model, messages, stream: true, max_tokens: effectiveMaxTokens,
+    ...(baseURL ? {} : { stream_options: { include_usage: true } }),
+    ...(isZaiGateway(baseURL) ? { thinking: { type: thinking === 'enabled' ? 'enabled' : 'disabled' } } : {})
   });
   let full = '';
   for await (const part of stream) {
@@ -383,7 +401,7 @@ function createLLM(settings) {
     configurationError,
     async stream(params) {
       if (!ready) throw new Error(configurationError || `Complete the ${provider} provider settings.`);
-      const args = { apiKey, baseURL, endpoint, model, maxTokens, ...params, turns: sanitizeTurns(params.turns) };
+      const args = { apiKey, baseURL, endpoint, model, maxTokens, thinking: tier === 'smart' ? 'enabled' : 'disabled', ...params, turns: sanitizeTurns(params.turns) };
       try {
         if (provider === 'openai') return await streamOpenAI(args);
         if (provider === CUSTOM_PROVIDER) return await streamOpenAI(args);
