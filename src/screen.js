@@ -45,7 +45,10 @@ async function captureScreenshot({ mode = 'screen' } = {}) {
   let img = src && src.thumbnail;
   if (!img || img.isEmpty()) return null;
   if (img.getSize().width > MAX_WIDTH) img = img.resize({ width: MAX_WIDTH });
-  return 'data:image/jpeg;base64,' + img.toJPEG(JPEG_QUALITY);
+  // toJPEG returns a Buffer — concatenating it directly stringifies the raw
+  // bytes as UTF-8, producing a corrupt "base64" payload that vision APIs
+  // reject. It must be explicitly base64-encoded.
+  return 'data:image/jpeg;base64,' + img.toJPEG(JPEG_QUALITY).toString('base64');
 }
 
 module.exports = { captureScreenshot };

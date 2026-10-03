@@ -840,6 +840,24 @@ if (isLinux && LINUX_CLICKTHROUGH) {
   }, 120);
 }
 ipcMain.on('open-pane', (_e, url) => { shell.openExternal(url).catch(() => {}); });
+// The overlay window is 700x600 — too small for the settings panel (clipped
+// tabs and fields) and for the transcript sidebar (clipped at the window
+// edge). The renderer reports which surfaces are open; the window grows to
+// fit and shrinks back, keeping its position and staying on-screen.
+ipcMain.on('window:layout', (_e, state) => {
+  if (!win || win.isDestroyed()) return;
+  const BASE_W = 700, BASE_H = 600;
+  let w = BASE_W, h = BASE_H;
+  if (state && state.sidebar) w = Math.max(w, BASE_W + 380);
+  if (state && state.settings) { w = Math.max(w, 800); h = Math.max(h, 760); }
+  const wa = screen.getDisplayMatching(win.getBounds()).workArea;
+  w = Math.min(w, wa.width - 24);
+  h = Math.min(h, wa.height - 24);
+  let [x, y] = win.getPosition();
+  if (x + w > wa.x + wa.width) x = Math.max(wa.x, wa.x + wa.width - w);
+  if (y + h > wa.y + wa.height) y = Math.max(wa.y, wa.y + wa.height - h);
+  win.setBounds({ x, y, width: w, height: h });
+});
 ipcMain.on('app:quit', () => app.quit());
 ipcMain.on('log', (_e, msg) => console.log('[renderer]', msg));
 // -------- resume / job-description file import --------

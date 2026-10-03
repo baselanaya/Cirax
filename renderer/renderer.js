@@ -871,6 +871,7 @@
     const panelWrap = document.getElementById('panel-wrap');
     if (panelWrap) panelWrap.classList.add('sidebar-open');
     sidebarOpen = true;
+    cirax.windowLayout({ settings: !scrim.classList.contains('hidden'), sidebar: true });
   }
 
   function hideSidebar() {
@@ -881,6 +882,7 @@
     const panelWrap = document.getElementById('panel-wrap');
     if (panelWrap) panelWrap.classList.remove('sidebar-open');
     sidebarOpen = false;
+    cirax.windowLayout({ settings: !scrim.classList.contains('hidden'), sidebar: false });
   }
 
   function toggleSidebar() {
@@ -1290,11 +1292,15 @@
     fillSettings();
     scrim.classList.remove('hidden');
     refreshWhisperModels();
+    cirax.windowLayout({ settings: true, sidebar: sidebarOpen });
   }
   // Keep the scrim open when the save fails (e.g. invalid base URL) so the
   // error in #s-status stays visible instead of flashing and vanishing.
   async function closeSettings() {
-    if (await saveSettings()) scrim.classList.add('hidden');
+    if (await saveSettings()) {
+      scrim.classList.add('hidden');
+      cirax.windowLayout({ settings: false, sidebar: sidebarOpen });
+    }
   }
   $('#more-btn').addEventListener('click', openSettings);
   $('#s-close').addEventListener('click', () => { void closeSettings(); });

@@ -475,7 +475,7 @@ button:focus { outline: none; }
 .s-close { border: none; background: var(--accent); color: #fff; font-weight: 600; font-size: 13px; padding: 6px 14px; border-radius: var(--r-pill); cursor: pointer; }
 
 /* Tab bar */
-.s-tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-shrink: 0; overflow-x: auto; }
+.s-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; flex-shrink: 0; }
 .s-tab {
   flex: 1; min-width: 72px; padding: 7px 4px; border-radius: var(--r-8);
   border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.03);
@@ -854,3 +854,14 @@ button:focus { outline: none; }
 /* Camera companion */
 #companion-strength { accent-color: #6E8BFF; }
 #companion-model-badge { align-self: center; }
+
+/* Thin dark scrollbars everywhere (the Chromium default slabs read as a
+   design bug on a glass overlay) */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.26); }
+::-webkit-scrollbar-corner { background: transparent; }
+
+/* Long status/error strings must wrap, not clip at the panel edge */
+.s-help, .s-note, .s-status, #s-status, #whisper-model-detail, #companion-status { overflow-wrap: anywhere; }
