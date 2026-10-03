@@ -102,15 +102,27 @@ async function companionStart(overrides = {}) {
 
   companionStatus = { running: true, model: companionModelAvailable() ? 'starting (neural)' : 'starting (geometric)', output, error: null };
   sendCompanionStatus();
-  companionProc = spawn(py, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-  companionProc.stdout.on('data', (d) => {
+  const proc = spawn(py, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  companionProc = proc;
+  proc.stdout.on('data', (d) => {
     const line = String(d);
     if (line.includes('gaze model:')) companionStatus.model = line.includes('gaze.onnx') ? 'MobileGaze (neural)' : 'geometric';
     else if (line.includes('geometric fallback')) companionStatus.model = 'geometric';
     sendCompanionStatus();
   });
-  companionProc.stderr.on('data', () => { /* mediapipe/ffmpeg chatter — surfaced only on failure */ });
-  companionProc.on('exit', (code) => {
+  proc.stderr.on('data', () => { /* mediapipe/ffmpeg chatter — surfaced only on failure */ });
+  // A spawn failure (EACCES/ENOENT) emits 'error' instead of 'exit'; without a
+  // listener it would crash the app.
+  proc.on('error', (e) => {
+    if (companionProc !== proc) return; // a newer daemon took over
+    companionProc = null;
+    companionStatus = { running: false, model: null, output: null, error: `companion failed to start: ${e.message}` };
+    sendCompanionStatus();
+  });
+  // Stop→quick-start race: an old daemon's late exit must not null the
+  // reference to (and status of) the daemon that replaced it.
+  proc.on('exit', (code) => {
+    if (companionProc !== proc) return;
     companionProc = null;
     companionStatus = { running: false, model: null, output: null,
       error: code && code !== 0 ? `companion exited with code ${code} (is the device busy?)` : null };
@@ -352,11 +364,16 @@ function createWindow() {
     }, 500);
   });
 
-  win.setTitle('Microsoft Edge Update'); // set before load
+  // Windows stealth: the process list and any window listing show an OS update
+  // helper instead of the app. Other platforms keep the honest name — the fake
+  // title also has to stay out of src/screen.js's own-window exclusion regex,
+  // which matches both spellings.
+  const windowTitle = isWindows ? 'Microsoft Edge Update' : 'cirax';
+  win.setTitle(windowTitle); // set before load
 
   win.webContents.on('did-finish-load', () => {
     win.showInactive();
-    win.setTitle('Microsoft Edge Update');
+    win.setTitle(windowTitle);
     // Warn about missing content protection on old Windows builds
     if (isWindows && shouldProtect && !WIN_SUPPORTS_CONTENT_PROTECTION) {
       send('status', {
@@ -757,7 +774,6 @@ ipcMain.handle('profile:pickDocument', async () => {
     return { canceled: false, error: (e && e.message) || String(e) };
   }
 });
-ipcMain.on('app:quit', () => app.quit());
 ipcMain.handle('applink:state', () => appLinkConsentState());
 ipcMain.handle('applink:revoke', (_e, callerId) => revokeAppLinkCaller(callerId));
 
@@ -864,6 +880,12 @@ function createPermissionsWindow() {
     }
   });
   permWin.loadFile(path.join(__dirname, 'renderer', 'permissions.html'));
+  // Onboarding happens before the first call, but a share could already be
+  // running — keep the wizard out of captures wherever the OS supports it.
+  if (!process.env.CIRAX_NO_PROTECT && WIN_SUPPORTS_CONTENT_PROTECTION) {
+    permWin.setContentProtection(true);
+  }
+  permWin.on('closed', () => { permWin = null; });
   permWin.webContents.on('did-finish-load', () => permWin.show());
 }
 
@@ -948,9 +970,7 @@ app.on('will-quit', () => {
   }
   if (localWhisperTranscriber) localWhisperTranscriber.forceStop().catch(() => {});
 });
-app.on('window-all-closed', () => app.quit());
 
-app.on('will-quit', () => { globalShortcut.unregisterAll(); });
 app.on('window-all-closed', (e) => {
   // Don't quit while the permissions window is open — the user may be in System Settings
   if (permWin) { e.preventDefault(); return; }

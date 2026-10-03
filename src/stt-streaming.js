@@ -195,13 +195,18 @@ class OpenAIRealtimeSTT {
     this.reconnecting = true;
     this._reconnectAttempts++;
     const delay = this._reconnectDelay * Math.pow(2, this._reconnectAttempts - 1);
-    setTimeout(() => {
+    this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
       this.reconnecting = false;
       this.connect();
     }, Math.min(delay, 16000));
   }
 
   disconnect() {
+    // A pending reconnect would silently re-open the socket after the user
+    // stopped capture, with nobody holding a reference to close it again.
+    if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
+    this.reconnecting = false;
     this._sessionReady = false;
     this._pendingAudio = [];
     if (this.ws) {
@@ -350,10 +355,16 @@ class DeepgramStreamingSTT {
     }
     this._reconnectAttempts++;
     const delay = this._reconnectDelay * Math.pow(2, this._reconnectAttempts - 1);
-    setTimeout(() => this.connect(), Math.min(delay, 16000));
+    this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
+      this.connect();
+    }, Math.min(delay, 16000));
   }
 
   disconnect() {
+    // Kill a pending reconnect or it re-opens the socket (and its keep-alive
+    // interval) after the user stopped capture — unreachable from main.js.
+    if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
     this._flushCommitted();
     this._clearKeepAlive();
     if (this.ws) {

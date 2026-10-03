@@ -33,7 +33,7 @@ function describeState({ state, transcript, settings, sttDisabled, shortcuts, wi
     smart: !!settings.smart,
     models: (settings.models && settings.models[settings.provider]) || null,
     hasKey: Object.fromEntries(Object.keys(keys).map((name) => [name, !!keys[name]])),
-    hasResumeContext: !!(settings.resumeContext && settings.resumeContext.length),
+    hasResumeContext: !!(settings.resumeText && settings.resumeText.length),
 
     // A global shortcut another app registered first is a classic silent break:
     // the user presses the key, nothing happens, and cirax never knew.

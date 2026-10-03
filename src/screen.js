@@ -9,7 +9,10 @@ const { desktopCapturer, screen } = require('electron');
 
 const MAX_WIDTH = 1600;
 const JPEG_QUALITY = 80;
-const OWN_APP_RE = /cirax/i;
+// Exclude cirax's own windows from window-mode capture. On Windows the
+// overlay is titled "Microsoft Edge Update" (process camouflage), so both
+// spellings must match — otherwise the overlay feeds itself to the model.
+const OWN_APP_RE = /cirax|microsoft edge update/i;
 
 async function captureScreenshot({ mode = 'screen' } = {}) {
   const cursor = screen.getCursorScreenPoint();

@@ -954,13 +954,10 @@
       // Don't auto-close sidebar — let user keep it open if they want
     }
     updateSttStatus({ active, streaming });
-    if (active) { startMic(); } else { stopMic(); stopSystemAudio(); }
     if (active && mode === 'local') {
       sttState = 'local';
       const label = document.getElementById('stt-status');
       if (label) { label.textContent = 'local'; label.className = 'stt-status stt-local'; }
-    } else {
-      updateSttStatus({ active, streaming });
     }
   });
 
@@ -1228,16 +1225,16 @@
 
   // ---- settings ----------------------------------------------------------
   const scrim = $('#settings-scrim');
-  function openSettings() { fillSettings(); scrim.classList.remove('hidden'); }
-  async function closeSettings() {
-    if (await saveSettings()) scrim.classList.add('hidden');
-  }
   function openSettings() {
     fillSettings();
     scrim.classList.remove('hidden');
     refreshWhisperModels();
   }
-  function closeSettings() { saveSettings(); scrim.classList.add('hidden'); }
+  // Keep the scrim open when the save fails (e.g. invalid base URL) so the
+  // error in #s-status stays visible instead of flashing and vanishing.
+  async function closeSettings() {
+    if (await saveSettings()) scrim.classList.add('hidden');
+  }
   $('#more-btn').addEventListener('click', openSettings);
   $('#s-close').addEventListener('click', () => { void closeSettings(); });
   scrim.addEventListener('click', (e) => { if (e.target === scrim) void closeSettings(); });

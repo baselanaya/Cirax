@@ -118,13 +118,18 @@ function load() {
   } catch {
     data = deepMerge(DEFAULTS, {});
   }
-  // Migration: decrypt keys stored encrypted by a previous run.
+  // Migration: decrypt keys stored encrypted by a previous run. Keep the
+  // blob when decryption fails (keyring unavailable, credential reset):
+  // save() already zeroed the plaintext copy on disk, so deleting the blob
+  // here would make a temporary keyring outage permanently destroy the keys.
   if (data.apiKeysEnc) {
     const decrypted = decryptKeys(data.apiKeysEnc);
     if (decrypted) {
       data.apiKeys = { ...data.apiKeys, ...decrypted };
+      delete data.apiKeysEnc;
+    } else {
+      data.secretsReadError = 'stored keys could not be decrypted (OS keyring unavailable?) — they remain encrypted on disk';
     }
-    delete data.apiKeysEnc;
   }
   return data;
 }
@@ -133,10 +138,15 @@ function save() {
   try {
     // Snapshot for disk: keys are stored encrypted whenever the OS keyring
     // is available. Plaintext keys live only in the runtime copy (`data`).
-    const snapshot = JSON.parse(JSON.stringify(data, (k, v) => (k === 'apiKeysEnc' ? undefined : v)));
+    // An apiKeysEnc blob that could not be decrypted (keyring gone) is
+    // carried forward verbatim so a temporary keyring outage can never
+    // destroy the stored credentials.
+    const snapshot = JSON.parse(JSON.stringify(data, (k, v) => ((k === 'apiKeysEnc' || k === 'secretsReadError') ? undefined : v)));
     if (secretsBackend === 'safeStorage') {
       snapshot.apiKeysEnc = encryptKeys(data.apiKeys);
       if (snapshot.apiKeysEnc) snapshot.apiKeys = {};
+    } else if (data.apiKeysEnc) {
+      snapshot.apiKeysEnc = data.apiKeysEnc;
     }
     fs.writeFileSync(FILE, JSON.stringify(snapshot, null, 2));
   } catch (e) { /* ignore */ }

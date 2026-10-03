@@ -141,7 +141,7 @@ function isZaiGateway(baseURL) {
   return /^https?:\/\/api\.(z\.ai|bigmodel\.cn)(:|\/)/i.test(String(baseURL || ''));
 }
 
-async function streamOpenAI({ apiKey, baseURL, model, system, turns, imageDataUrl, maxTokens, onToken, provider, thinking }) {
+async function streamOpenAI({ apiKey, baseURL, model, system, turns, imageDataUrl, maxTokens, onToken, provider, thinking, includeUsage }) {
   const OpenAI = require('openai');
   const client = new OpenAI(baseURL ? { apiKey, baseURL } : { apiKey });
   const messages = [{ role: 'system', content: system }];
@@ -168,7 +168,7 @@ async function streamOpenAI({ apiKey, baseURL, model, system, turns, imageDataUr
   }
   const stream = await client.chat.completions.create({
     model, messages, stream: true, max_tokens: effectiveMaxTokens,
-    ...(baseURL ? {} : { stream_options: { include_usage: true } }),
+    ...((baseURL && !includeUsage) ? {} : { stream_options: { include_usage: true } }),
     ...(isZaiGateway(baseURL) ? { thinking: { type: thinking === 'enabled' ? 'enabled' : 'disabled' } } : {})
   });
   let full = '';
@@ -247,15 +247,21 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
   });
   const stream = await client.messages.create({ model, max_tokens: maxTokens, system, messages, stream: true });
   let full = '';
+  // Usage arrives split across events (input at message_start, output at
+  // message_delta) — accumulate locally and record once so a request is
+  // never counted twice.
+  let usageIn = 0;
+  let usageOut = 0;
   for await (const ev of stream) {
     if (ev.type === 'message_start' && ev.message && ev.message.usage) {
-      addUsage('anthropic', { input_tokens: ev.message.usage.input_tokens });
+      usageIn = ev.message.usage.input_tokens || 0;
     }
     if (ev.type === 'message_delta' && ev.usage) {
-      addUsage('anthropic', { completion_tokens: ev.usage.output_tokens });
+      usageOut = ev.usage.output_tokens || 0;
     }
     if (ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta') { full += ev.delta.text; onToken(ev.delta.text); }
   }
+  if (usageIn || usageOut) addUsage('anthropic', { input_tokens: usageIn, completion_tokens: usageOut });
   return full;
 }
 
@@ -275,11 +281,16 @@ async function streamGemini({ apiKey, model, system, turns, imageDataUrl, maxTok
     model, contents, config: { systemInstruction: system, maxOutputTokens: maxTokens }
   });
   let full = '';
+  // Gemini's streaming chunks carry CUMULATIVE usageMetadata — recording
+  // each chunk would multiply prompt tokens by the chunk count. Keep the
+  // latest snapshot and record it once at stream end.
+  let lastUsage = null;
   for await (const chunk of stream) {
-    if (chunk && chunk.usageMetadata) addUsage('gemini', chunk.usageMetadata);
+    if (chunk && chunk.usageMetadata) lastUsage = chunk.usageMetadata;
     const t = chunk && chunk.text;
     if (t) { full += t; onToken(t); }
   }
+  if (lastUsage) addUsage('gemini', lastUsage);
   return full;
 }
 
@@ -406,7 +417,7 @@ function createLLM(settings) {
         if (provider === 'openai') return await streamOpenAI(args);
         if (provider === CUSTOM_PROVIDER) return await streamOpenAI(args);
         if (provider === 'ollama') return await streamOllama(args);
-        if (provider === 'groq') return await streamOpenAI({ ...args, baseURL: 'https://api.groq.com/openai/v1' });
+        if (provider === 'groq') return await streamOpenAI({ ...args, baseURL: 'https://api.groq.com/openai/v1', includeUsage: true });
         if (provider === 'minimax') return await streamOpenAI({ ...args, baseURL: MINIMAX_BASE_URLS[minimaxRegion] || MINIMAX_BASE_URLS.global_en });
         if (provider === 'anthropic') return await streamAnthropic(args);
         if (provider === 'gemini') return await streamGemini(args);

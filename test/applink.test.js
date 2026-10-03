@@ -10,7 +10,9 @@ const { AppLinkServer, AppLinkClient } = require('../vendor/app-link');
 const SETTINGS = {
   provider: 'openai',
   smart: true,
-  resumeContext: 'Mann Bellani — Texas A&M, worked at …',
+  // The real settings key is resumeText — describeState reads it, and the
+  // leak test below only proves anything if this field is actually carried.
+  resumeText: 'Mann Bellani — Texas A&M, worked at …',
   apiKeys: { openai: 'sk-proj-realkeyvaluehere', anthropic: '', gemini: 'AIzaSyRealKey', nvidia: '' },
   models: { openai: { fast: 'gpt-4o-mini', smart: 'gpt-4o' } },
 };
