@@ -559,6 +559,11 @@
   $('#hide-btn').addEventListener('click', toggleHide);
   cirax.on('hide:toggle', toggleHide);
 
+  // The X in the toolbar. It has existed since the original project with an
+  // icon and a preload bridge — but no click listener: clicking it did
+  // nothing. The ⌘⇧X/Ctrl+Shift+X shortcut was the only working exit.
+  $('#quit-btn').addEventListener('click', () => cirax.quit());
+
   // Stop = start/stop listening. Kick off system-audio capture straight from the click so
   // the user-gesture is fresh for getDisplayMedia (loopback capture needs it).
   $('#stop-btn').addEventListener('click', async () => {
