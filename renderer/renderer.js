@@ -564,9 +564,11 @@
   $('#stop-btn').addEventListener('click', async () => {
     const turningOn = !$('#stop-btn').classList.contains('active');
     if (turningOn) {
-      // startSystemAudio may fail (user cancels, no permission) — that's OK,
-      // mic will still work and capture will toggle regardless
-      try { await startSystemAudio(); } catch (_) { /* handled inside startSystemAudio */ }
+      // Fire WITHOUT awaiting: the portal dialog can be dismissed without
+      // sharing, and on Linux that can leave getDisplayMedia pending
+      // forever — capture must never wait on it. startSystemAudio owns its
+      // errors; a wedge self-heals via its watchdog.
+      startSystemAudio().catch(() => {});
     }
     const active = await cirax.captureToggle();
     if (turningOn && !active) stopSystemAudio();
@@ -724,20 +726,33 @@
 
   // ---- capture: system/meeting audio (getDisplayMedia loopback, in cirax's process) ----
   let sysStream = null, sysCtx = null, sysWorklet = null, sysStarting = false;
+  let sysAttempt = 0; // invalidates in-flight getDisplayMedia results across stop/start
   async function startSystemAudio() {
     // Called both from the stop-btn click (fresh user gesture for getDisplayMedia) and from the
     // capture:state handler. getDisplayMedia is async, so `if (sysStream) return` alone loses the
     // race and can open a second loopback stream that is then orphaned.
     if (sysStream || sysStarting) return;
     sysStarting = true;
+    const attempt = ++sysAttempt;
     if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
       cirax.log('system audio unavailable: getDisplayMedia not supported');
       showStatus('Meeting audio capture is not available on this device build.');
+      sysStarting = false;
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-
+      // Electron + PipeWire portals have a dismissal bug: closing the
+      // picker without sharing can leave this promise pending FOREVER.
+      // Race it with a generous watchdog (the user may take their time
+      // choosing) so the state can never wedge permanently; a stale late
+      // resolution is discarded via the attempt check below.
+      const stream = await Promise.race([
+        navigator.mediaDevices.getDisplayMedia({ video: true, audio: true }),
+        new Promise((_r, reject) => {
+          setTimeout(() => reject(new Error('The screen-share dialog timed out.')), 150000);
+        })
+      ]);
+      if (attempt !== sysAttempt) { stream.getTracks().forEach((t) => t.stop()); return; } // superseded
       stream.getVideoTracks().forEach((t) => t.stop()); // we only want the audio
       const tracks = stream.getAudioTracks();
       if (!tracks.length) {

@@ -386,6 +386,12 @@ function createWindow() {
   win.webContents.on('render-process-gone', (_e, d) => {
     console.log('[cirax] renderer gone', JSON.stringify(d));
     recordEvent({ level: 'fatal', event: 'renderer_gone', code: d && d.reason, msg: 'renderer process ended: ' + JSON.stringify(d), frame: 'BrowserWindow' });
+    // A dead renderer used to leave (or close — window-all-closed quits the
+    // app) an unresponsive window. Reload instead: transcript replays, mic
+    // resumes on boot, and the crash becomes a flicker.
+    if (d && d.reason !== 'clean-exit' && !win.isDestroyed()) {
+      setTimeout(() => { if (!win.isDestroyed()) win.webContents.reload(); }, 800);
+    }
   });
 }
 
