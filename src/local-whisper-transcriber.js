@@ -91,7 +91,14 @@ class LocalWhisperTranscriber {
 
     this.queueTail = job
       .catch((error) => {
-        if (!this.discardPendingJobs) this.onError(error);
+        // A dead whisper-server (crash mid-capture) would otherwise make
+        // every queued utterance fail one by one forever — go terminal:
+        // stop accepting audio and say so once; capture restart brings it back.
+        if (!this.discardPendingJobs) {
+          this.acceptingAudio = false;
+          this.discardPendingJobs = true;
+          this.onError(error instanceof Error ? error : new Error(String(error)));
+        }
       })
       .finally(() => {
         this.pendingJobs -= 1;

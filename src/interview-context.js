@@ -22,7 +22,7 @@ const CATEGORY_PATTERNS = {
     /why (do you want|are you interested|this company|this role|us|here)/i,
     /why (are you leaving|did you leave|move on)/i,
     /what (attracted|draws|interests|excites|appeals) (you|to)/i,
-    /where do you see yourself/i, /5 years/i, /career goals/i,
+    /where do you see yourself/i, /next 5 years/i, /in 5 years/i, /five years/i, /career goals/i,
     /ideal (role|company|environment|manager|team)/i,
     /what (kind of|type of) (work|manager|team)/i,
     /motivates you/i, /passionate about/i,
@@ -84,16 +84,18 @@ const CATEGORY_PATTERNS = {
 
 function detectCategory(transcript) {
   if (!transcript || !transcript.length) return 'general';
-  // Look at the last 5 "Them" turns — the interviewer's recent questions
-  const recentThem = transcript
-    .filter(t => t.channel === 'them')
-    .slice(-5)
-    .map(t => t.text)
-    .join(' ');
-  if (!recentThem) return 'general';
+  // Score ONLY the latest interviewer turn: matching across the last 5 turns
+  // made a stale salary question or "any questions for us?" from minutes ago
+  // outrank the technical question being asked right now, and the wrong
+  // category then latched for the next several turns.
+  const lastThem = [...transcript]
+    .reverse()
+    .find(t => t.channel === 'them');
+  const text = lastThem ? lastThem.text : '';
+  if (!text) return 'general';
 
   for (const [category, patterns] of Object.entries(CATEGORY_PATTERNS)) {
-    if (patterns.some(re => re.test(recentThem))) return category;
+    if (patterns.some(re => re.test(text))) return category;
   }
   return 'general';
 }
@@ -144,7 +146,9 @@ function buildResumeBlock(resumeText, limit = 2400) {
       if (!val) continue;
       const sp = SECTION_PATTERNS.find(s => s.key === key);
       const label = sp && sp.label;
-      const chunk = label ? `${label}:\n${clip(val, Math.min(rem - label.length - 2, 800))}` : clip(val, 80);
+      // Math.max: a negative slice limit silently returns the whole value
+      // minus two chars, blowing the budget instead of truncating.
+      const chunk = label ? `${label}:\n${clip(val, Math.max(0, Math.min(rem - label.length - 2, 800)))}` : clip(val, 80);
       parts.push(chunk);
       rem -= chunk.length;
     }

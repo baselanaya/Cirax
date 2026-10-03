@@ -14,11 +14,20 @@ class CiraxAudioProcessor extends AudioWorkletProcessor {
     const input = inputs[0];
     if (!input || !input[0]) return true;
 
-    const channelData = input[0]; // mono
-    for (let i = 0; i < channelData.length; i++) {
-      this._buffer[this._writeIndex++] = channelData[i];
-      if (this._writeIndex >= this._bufferSize) {
-        this._flush();
+    // Downmix when the source is stereo (system-audio loopback commonly is):
+    // reading only channel 0 silently drops anything panned right.
+    const left = input[0];
+    const right = input.length > 1 ? input[1] : null;
+    const n = left.length;
+    if (right) {
+      for (let i = 0; i < n; i++) {
+        this._buffer[this._writeIndex++] = (left[i] + right[i]) * 0.5;
+        if (this._writeIndex >= this._bufferSize) this._flush();
+      }
+    } else {
+      for (let i = 0; i < n; i++) {
+        this._buffer[this._writeIndex++] = left[i];
+        if (this._writeIndex >= this._bufferSize) this._flush();
       }
     }
     return true;

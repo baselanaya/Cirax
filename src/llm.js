@@ -141,7 +141,7 @@ function isZaiGateway(baseURL) {
   return /^https?:\/\/api\.(z\.ai|bigmodel\.cn)(:|\/)/i.test(String(baseURL || ''));
 }
 
-async function streamOpenAI({ apiKey, baseURL, model, system, turns, imageDataUrl, maxTokens, onToken, provider, thinking, includeUsage }) {
+async function streamOpenAI({ apiKey, baseURL, model, system, turns, imageDataUrl, maxTokens, onToken, provider, thinking, includeUsage, signal, onActivity }) {
   const OpenAI = require('openai');
   const client = new OpenAI(baseURL ? { apiKey, baseURL } : { apiKey });
   const messages = [{ role: 'system', content: system }];
@@ -170,9 +170,12 @@ async function streamOpenAI({ apiKey, baseURL, model, system, turns, imageDataUr
     model, messages, stream: true, max_tokens: effectiveMaxTokens,
     ...((baseURL && !includeUsage) ? {} : { stream_options: { include_usage: true } }),
     ...(isZaiGateway(baseURL) ? { thinking: { type: thinking === 'enabled' ? 'enabled' : 'disabled' } } : {})
-  });
+  }, signal ? { signal } : undefined);
   let full = '';
   for await (const part of stream) {
+    // Every chunk counts as activity — reasoning models can stream long
+    // hidden reasoning_content before the first visible token.
+    if (onActivity) onActivity();
     if (part.usage) addUsage(provider || 'openai', part.usage);
     const d = part.choices && part.choices[0] && part.choices[0].delta && part.choices[0].delta.content;
     if (d) { full += d; onToken(d); }
@@ -183,15 +186,26 @@ async function streamOpenAI({ apiKey, baseURL, model, system, turns, imageDataUr
 // Azure AI Foundry Models API (cognitiveservices.azure.com hosts) lives under
 // {endpoint}/openai/v1 and authenticates with the `api-key` header.
 function normalizeAzureBaseURL(raw) {
-  let u = String(raw || '').trim().replace(/\/+$/, '').replace(/\/chat\/completions$/i, '');
+  let u = String(raw || '').trim();
   if (!u) return '';
-  if (/cognitiveservices\.azure\.com/i.test(u) && !/\/openai\/v1$/i.test(u)) {
+  // Users paste full deployment URLs — path, api-version query and all.
+  // openai.azure.com is origin-based; normalize it to the bare origin.
+  let originOnly = false;
+  if (/openai\.azure\.com/i.test(u)) {
+    try { u = new URL(u).origin; } catch { /* fall through to the cleanup path */ }
+    originOnly = true;
+  }
+  u = u.replace(/\/+$/, '').replace(/\/chat\/completions$/i, '');
+  if (originOnly) return u;
+  // Foundry resources: both the classic cognitiveservices.azure.com hosts and
+  // the newer *.services.ai.azure.com portal hosts speak {host}/openai/v1.
+  if ((/cognitiveservices\.azure\.com|services\.ai\.azure\.com/i.test(u)) && !/\/openai\/v1$/i.test(u)) {
     u += '/openai/v1';
   }
   return u;
 }
 
-async function streamAzure({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken, endpoint }) {
+async function streamAzure({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken, endpoint, signal, onActivity }) {
   const url = normalizeAzureBaseURL(endpoint);
   if (!url) throw new Error('Missing Azure endpoint. Add your Azure AI Foundry or Azure OpenAI endpoint in Settings.');
   const messages = [{ role: 'system', content: system }];
@@ -221,9 +235,13 @@ async function streamAzure({ apiKey, model, system, turns, imageDataUrl, maxToke
     };
     client = new OpenAI({ baseURL: url, apiKey, fetch: azureFetch });
   }
-  const stream = await client.chat.completions.create({ model, messages, stream: true, max_completion_tokens: maxTokens });
+  const stream = await client.chat.completions.create(
+    { model, messages, stream: true, max_completion_tokens: maxTokens, stream_options: { include_usage: true } },
+    signal ? { signal } : undefined
+  );
   let full = '';
   for await (const part of stream) {
+    if (onActivity) onActivity();
     if (part.usage) addUsage('azure', part.usage);
     const d = part.choices && part.choices[0] && part.choices[0].delta && part.choices[0].delta.content;
     if (d) { full += d; onToken(d); }
@@ -231,7 +249,7 @@ async function streamAzure({ apiKey, model, system, turns, imageDataUrl, maxToke
   return full;
 }
 
-async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken }) {
+async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken, signal, onActivity }) {
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey });
   const messages = turns.map((t, i) => {
@@ -245,7 +263,7 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
     }
     return { role: t.role, content: t.text };
   });
-  const stream = await client.messages.create({ model, max_tokens: maxTokens, system, messages, stream: true });
+  const stream = await client.messages.create({ model, max_tokens: maxTokens, system, messages, stream: true }, signal ? { signal } : undefined);
   let full = '';
   // Usage arrives split across events (input at message_start, output at
   // message_delta) — accumulate locally and record once so a request is
@@ -253,6 +271,7 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
   let usageIn = 0;
   let usageOut = 0;
   for await (const ev of stream) {
+    if (onActivity) onActivity();
     if (ev.type === 'message_start' && ev.message && ev.message.usage) {
       usageIn = ev.message.usage.input_tokens || 0;
     }
@@ -265,7 +284,7 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
   return full;
 }
 
-async function streamGemini({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken }) {
+async function streamGemini({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken, thinking, onActivity }) {
   const { GoogleGenAI } = require('@google/genai');
   const ai = new GoogleGenAI({ apiKey });
   const contents = turns.map((t, i) => {
@@ -277,8 +296,12 @@ async function streamGemini({ apiKey, model, system, turns, imageDataUrl, maxTok
     }
     return { role: t.role === 'assistant' ? 'model' : 'user', parts };
   });
+  // Gemini 2.5 models think by default and the thoughts count against
+  // maxOutputTokens — the fast tier could burn its whole budget before the
+  // first visible character (same failure shape as the GLM case).
+  const thinkingConfig = thinking === 'disabled' ? { thinkingBudget: 0 } : undefined;
   const stream = await ai.models.generateContentStream({
-    model, contents, config: { systemInstruction: system, maxOutputTokens: maxTokens }
+    model, contents, config: { systemInstruction: system, maxOutputTokens: maxTokens, ...(thinkingConfig ? { thinkingConfig } : {}) }
   });
   let full = '';
   // Gemini's streaming chunks carry CUMULATIVE usageMetadata — recording
@@ -286,6 +309,7 @@ async function streamGemini({ apiKey, model, system, turns, imageDataUrl, maxTok
   // latest snapshot and record it once at stream end.
   let lastUsage = null;
   for await (const chunk of stream) {
+    if (onActivity) onActivity();
     if (chunk && chunk.usageMetadata) lastUsage = chunk.usageMetadata;
     const t = chunk && chunk.text;
     if (t) { full += t; onToken(t); }
@@ -294,7 +318,7 @@ async function streamGemini({ apiKey, model, system, turns, imageDataUrl, maxTok
   return full;
 }
 
-async function streamOllama({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken }) {
+async function streamOllama({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken, signal, onActivity }) {
   const baseUrl = apiKey || 'http://localhost:11434';
   const url = `${baseUrl.replace(/\/$/, '')}/api/chat`;
 
@@ -318,7 +342,9 @@ async function streamOllama({ apiKey, model, system, turns, imageDataUrl, maxTok
     response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages, stream: true })
+      // num_predict keeps output inside the same budget the other providers get.
+      body: JSON.stringify({ model, messages, stream: true, options: { num_predict: maxTokens } }),
+      ...(signal ? { signal } : {})
     });
   } catch (err) {
     throw new Error(`Ollama fetch failed: ${err.message}. Is Ollama running at ${baseUrl}?`);
@@ -332,6 +358,7 @@ async function streamOllama({ apiKey, model, system, turns, imageDataUrl, maxTok
   let full = '';
   let buffer = '';
   for await (const chunk of response.body) {
+    if (onActivity) onActivity();
     buffer += decoder.decode(chunk, { stream: true });
     const lines = buffer.split('\n');
     buffer = lines.pop(); // keep incomplete line

@@ -16,7 +16,7 @@ const { CURRENT_GEMINI_DEFAULT } = require('./llm');
 class OpenAIRealtimeSTT {
   constructor(apiKey, options = {}) {
     this.apiKey = apiKey;
-    this.model = options.model || 'gpt-realtime-whisper';
+    this.model = options.model || 'gpt-4o-mini-transcribe';
     this.ws = null;
     this.connected = false;
     this.reconnecting = false;
@@ -29,6 +29,10 @@ class OpenAIRealtimeSTT {
     this._reconnectDelay = 1000;
     this._pendingAudio = [];
     this._sessionReady = false;
+    // Interim accumulation: deltas arrive as fragments and the renderer
+    // REPLACES the interim line on every event — forwarding raw fragments
+    // made the bar flicker single words.
+    this._interimByItem = new Map();
   }
 
   async connect() {
@@ -51,20 +55,17 @@ class OpenAIRealtimeSTT {
         this._reconnectAttempts = 0;
         this.onStatusChange('connected');
 
-        // Configure the transcription session (GA format)
+        // Configure the transcription session. The GA shape is FLAT fields
+        // (input_audio_format / input_audio_transcription) — the nested
+        // audio.input.format shape is not a documented API and the server
+        // rejects it with an error event, permanently falling back to batch.
         this._sendEvent({
           type: 'session.update',
           session: {
             type: 'transcription',
-            audio: {
-              input: {
-                format: { type: 'audio/pcm', rate: 24000 },
-                transcription: {
-                  model: this.model,
-                  language: 'en'
-                }
-              }
-            }
+            input_audio_format: 'pcm16',
+            input_audio_transcription: { model: this.model, language: 'en' },
+            turn_detection: null
           }
         });
       });
@@ -104,17 +105,23 @@ class OpenAIRealtimeSTT {
         this._flushPendingAudio();
         break;
 
-      case 'conversation.item.input_audio_transcription.delta':
+      case 'conversation.item.input_audio_transcription.delta': {
         if (event.delta) {
-          this.onInterim(event.delta);
+          const itemId = event.item_id || 'default';
+          const acc = (this._interimByItem.get(itemId) || '') + event.delta;
+          this._interimByItem.set(itemId, acc);
+          this.onInterim(acc);
         }
         break;
+      }
 
-      case 'conversation.item.input_audio_transcription.completed':
+      case 'conversation.item.input_audio_transcription.completed': {
+        if (event.item_id) this._interimByItem.delete(event.item_id);
         if (event.transcript && event.transcript.trim()) {
           this.onTranscript(event.transcript.trim());
         }
         break;
+      }
 
       case 'input_audio_buffer.speech_started':
         break;
@@ -237,6 +244,8 @@ class DeepgramStreamingSTT {
     this._reconnectDelay = 1000;
     this._keepAliveInterval = null;
     this._committed = ''; // is_final segments not yet closed out by speech_final
+    this._pendingAudio = []; // chunks bridging the connect/reconnect gap
+    this._flushedAt = 0;     // UtteranceEnd-flush guard against late finals
   }
 
   async connect() {
@@ -274,6 +283,10 @@ class DeepgramStreamingSTT {
             this.ws.send(JSON.stringify({ type: 'KeepAlive' }));
           }
         }, 3000);
+        // Audio buffered while connecting — flush it now that the socket drains.
+        while (this._pendingAudio.length > 0 && this.ws.readyState === 1) {
+          this.ws.send(Buffer.from(this._pendingAudio.shift()));
+        }
       });
 
       this.ws.on('message', (data) => {
@@ -301,6 +314,11 @@ class DeepgramStreamingSTT {
 
   _handleMessage(msg) {
     if (msg.type === 'Results') {
+      // UtteranceEnd can arrive BEFORE the final speech_final Results for
+      // that utterance (documented Deepgram behavior) — a flush followed by
+      // the late final duplicates the same words as two transcript turns.
+      // Suppress Results for a short window after an UtteranceEnd flush.
+      if (this._flushedAt && Date.now() - this._flushedAt < 1000) return;
       const alt = msg.channel?.alternatives?.[0];
       if (!alt) return;
       const text = (alt.transcript || '').trim();
@@ -334,6 +352,7 @@ class DeepgramStreamingSTT {
   _flushCommitted() {
     const full = (this._committed || '').trim();
     this._committed = '';
+    this._flushedAt = Date.now();
     if (full && !looksLikeHallucination(full)) this.onTranscript(full);
     this.onInterim('');
   }
@@ -341,6 +360,11 @@ class DeepgramStreamingSTT {
   sendAudio(pcmBuffer) {
     if (this.ws && this.ws.readyState === 1) {
       this.ws.send(Buffer.from(pcmBuffer));
+    } else {
+      // Bridge the connect/reconnect gap (~200-500ms) — dropping chunks
+      // there silently punches holes in the first words after (re)connect.
+      this._pendingAudio.push(pcmBuffer);
+      if (this._pendingAudio.length > 80) this._pendingAudio.shift();
     }
   }
 
@@ -365,6 +389,7 @@ class DeepgramStreamingSTT {
     // Kill a pending reconnect or it re-opens the socket (and its keep-alive
     // interval) after the user stopped capture — unreachable from main.js.
     if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
+    this._pendingAudio = [];
     this._flushCommitted();
     this._clearKeepAlive();
     if (this.ws) {

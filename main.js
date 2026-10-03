@@ -374,6 +374,9 @@ function createWindow() {
   win.webContents.on('did-finish-load', () => {
     win.showInactive();
     win.setTitle(windowTitle);
+    // A recreated renderer (macOS activate, crash) starts with an empty
+    // sidebar while the LLM still sees the old turns — replay them.
+    for (const turn of transcript) win.webContents.send('transcript', turn);
     // Warn about missing content protection on old Windows builds
     if (isWindows && shouldProtect && !WIN_SUPPORTS_CONTENT_PROTECTION) {
       send('status', {
@@ -390,6 +393,7 @@ function createWindow() {
 // -------- STT flushing (batch mode fallback) --------
 async function flushChannel(channel) {
   if (state.transcribing[channel]) return;
+  if (sttDisabled) return; // locked out (bad key/quota) — don't re-request every 900ms
   const chunks = buffers[channel];
   if (!chunks.length) return;
   const pcm = Buffer.concat(chunks);
@@ -600,9 +604,17 @@ async function setCapturing(active) {
 
 // -------- feature runner --------
 async function runFeature(mode, userText) {
-  if (state.busy) return;
   const def = MODES[mode];
-  if (!def) return;
+  if (!def) {
+    send('llm:error', { message: `Unknown mode "${mode}".` });
+    return;
+  }
+  if (state.busy) {
+    // The renderer already flipped to its busy state — silence here would
+    // freeze the composer until the 40s failsafe.
+    send('llm:error', { message: 'Still answering the previous question — wait for it to finish.' });
+    return;
+  }
   state.busy = true;
   let streamSettled = false; // drop stray tokens from a stream we've already abandoned
   try {
@@ -633,14 +645,23 @@ async function runFeature(mode, userText) {
           : process.platform === 'win32'
             ? 'Screen capture failed. Make sure cirax is not blocked by Windows privacy or security software, then try again.'
             : 'Screen capture failed. Check your desktop capture permissions, then try again.';
-        send('status', { message });
+        // This mode's prompt is built around the screenshot — running it
+        // without one just makes the model invent a problem.
+        send('llm:error', { message });
+        return;
       }
     }
 
     const settingsForPrompt = store.getSettings();
-    const contextBlock = buildInterviewContext(settingsForPrompt, mode, transcript);
+    // Context budget: an unbounded transcript (one runaway STT turn can be
+    // tens of thousands of chars) goes straight to the provider otherwise —
+    // the caps in src/context.js were defined but never applied here.
+    const { truncate } = require('./src/context');
+    const cappedTranscript = transcript.slice(-40)
+      .map((t) => ({ ...t, text: truncate(String(t.text || ''), 800) }));
+    const contextBlock = buildInterviewContext(settingsForPrompt, mode, cappedTranscript);
     const system = def.buildSystem ? def.buildSystem(contextBlock, settingsForPrompt.aiRules || '') : (def.system || '');
-    const built = def.build({ transcript, userText: userText || '' });
+    const built = def.build({ transcript: cappedTranscript, userText: userText || '' });
 
     // Watchdog: a provider that stalls mid-stream would otherwise hang the await forever,
     // leaving state.busy = true and wedging every later question until an app restart.
@@ -653,12 +674,25 @@ async function runFeature(mode, userText) {
       };
       rearm();
     });
+    // Aborting the provider call on timeout also stops the billing and the
+    // zombie stream (late tokens are muted, but usage kept accumulating).
+    const abort = new AbortController();
+    const timeoutAbort = () => abort.abort();
+    stalled.catch(timeoutAbort);
     try {
       await Promise.race([
         llm.stream({
           system,
           turns: [{ role: 'user', text: built }],
           imageDataUrl,
+          signal: abort.signal,
+          // Reasoning models (GLM thinking, o-series) can stream long hidden
+          // reasoning before the first visible token — count that as activity
+          // so the watchdog doesn't kill a healthy slow answer.
+          onActivity: () => rearm(),
+          // The leetcode answer is fenced code + prose — 700 (fast tier) is
+          // routinely cut mid-code-block.
+          ...(mode === 'leetcode' ? { maxTokens: 1600 } : {}),
           onToken: (t) => { if (streamSettled) return; rearm(); send('llm:token', { text: t }); }
         }),
         stalled
@@ -675,6 +709,7 @@ async function runFeature(mode, userText) {
   } catch (e) {
     recordEvent({ level: 'error', event: 'llm_failed', msg: e && e.message ? e.message : String(e), frame: 'runFeature', context: { mode, provider: store.getSettings().provider } });
     send('llm:error', { message: e && e.message ? e.message : String(e) });
+    try { send('usage', require('./src/llm').getSessionUsage()); } catch (_) { /* best-effort */ }
   } finally {
     streamSettled = true;
     state.busy = false;
@@ -683,7 +718,13 @@ async function runFeature(mode, userText) {
 
 // -------- IPC --------
 ipcMain.handle('settings:get', () => store.getSettings());
-ipcMain.handle('settings:set', (_e, patch) => { sttDisabled = false; return store.setSettings(patch); });
+ipcMain.handle('settings:set', (_e, patch) => {
+  // Only an STT-related change can cure an STT lockout — re-arming on every
+  // save (a smart-toggle click is a save too) would restart the retry spam.
+  const sttKeys = ['apiKeys', 'sttProvider', 'localWhisper'];
+  if (sttKeys.some((k) => patch && Object.prototype.hasOwnProperty.call(patch, k))) sttDisabled = false;
+  return store.setSettings(patch);
+});
 ipcMain.handle('companion:start', (_e, overrides) => companionStart(overrides || {}));
 ipcMain.handle('companion:stop', () => companionStop());
 ipcMain.handle('companion:status', () => companionStatus);
@@ -744,7 +785,13 @@ ipcMain.handle('transcript:clear', () => {
   transcript.splice(0, transcript.length);
   return { ok: true };
 });
-ipcMain.on('ask', (_e, payload) => runFeature(payload.mode, payload.text));
+ipcMain.on('ask', (_e, payload) => {
+  if (!payload || typeof payload !== 'object') {
+    send('llm:error', { message: 'Malformed request.' });
+    return;
+  }
+  runFeature(payload.mode, payload.text);
+});
 ipcMain.on('mic:pcm', (_e, arrayBuffer) => { if (state.capturing) routeAudio('you', arrayBuffer); });
 ipcMain.on('system:pcm', (_e, arrayBuffer) => { if (state.capturing) routeAudio('them', arrayBuffer); });
 ipcMain.on('mouse:ignore', (_e, v) => { if (win) win.setIgnoreMouseEvents(!!v, { forward: true }); });
@@ -792,12 +839,18 @@ ipcMain.on('permissions:continue', async () => {
 function registerShortcuts() {
   shortcutState.assist = globalShortcut.register('CommandOrControl+Return', () => runFeature('assist', ''));
   shortcutState.say = globalShortcut.register('CommandOrControl+Shift+Return', () => runFeature('say', ''));
-  shortcutState.leetcode = globalShortcut.register('CommandOrControl+H', () => runFeature('leetcode', ''));
+  // Cmd+H is the system-wide Hide accelerator on macOS — registering it
+  // globally steals it from every application. Alt+Cmd+H there instead.
+  const leetcodeCombo = isMac ? 'Alt+CommandOrControl+H' : 'CommandOrControl+H';
+  shortcutState.leetcode = globalShortcut.register(leetcodeCombo, () => runFeature('leetcode', ''));
   shortcutState.hide = globalShortcut.register('CommandOrControl+Shift+/', () => send('hide:toggle', {}));
   shortcutState.quit = globalShortcut.register('CommandOrControl+Shift+X', () => app.quit());
   for (const [name, wasRegistered] of Object.entries(shortcutState)) {
     if (!wasRegistered) {
       recordEvent({ level: 'warn', event: 'shortcut_unavailable', msg: 'another application holds the ' + name + ' shortcut', frame: 'registerShortcuts', context: { shortcut: name } });
+      // A key that silently does nothing is the most confusing failure mode —
+      // tell the user which one is taken.
+      send('status', { message: `The ${name} shortcut is held by another application — its key won't work until it's freed.` });
     }
   }
 }
@@ -921,7 +974,17 @@ function launchApp() {
       shortcuts: { ...shortcutState },
       windowAlive: !!(win && !win.isDestroyed()),
     }),
-    setCapturing,
+    // External control (applink) must go through the same desired-state
+    // bookkeeping as the stop button, or the two desync: an external stop
+    // leaves desiredCaptureState true, and the user's next click flashes
+    // the share picker while doing nothing.
+    setCapturing: (active) => {
+      desiredCaptureState = !!active;
+      captureTransition = captureTransition
+        .catch(() => state.capturing)
+        .then(() => setCapturing(!!active));
+      return captureTransition;
+    },
     // Looked up rather than captured: the window is recreated on 'activate',
     // so a reference taken at startup goes stale.
     getWindow: () => win,

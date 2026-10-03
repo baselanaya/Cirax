@@ -171,6 +171,12 @@ class GazeCorrector:
         """
         pts = self._mesh_points(frame)
         if pts is None:
+            # Face lost: drop stale EMA history so a re-acquired face isn't
+            # corrected with pre-gap angles from seconds ago.
+            self._ema_yaw.clear()
+            self._ema_pitch.clear()
+            self._ema_h.clear()
+            self._ema_v.clear()
             return frame
         out = frame.copy()
         h, w = frame.shape[:2]
@@ -199,7 +205,7 @@ class GazeCorrector:
                         continue
                     region = out[ay0:ay1, ax0:ax1]
                     shifted = cv2.warpAffine(region, np.float32([[1, 0, dx], [0, 1, dy]]),
-                                             (aw, ah))
+                                             (aw, ah), borderMode=cv2.BORDER_REFLECT)
                     mask = np.zeros((ah, aw), np.float32)
                     cv2.ellipse(mask, (aw // 2, ah // 2),
                                 (int(aw * 0.46), int(ah * 0.46)), 0, 0, 360, 1.0, -1)
@@ -224,19 +230,24 @@ class GazeCorrector:
             aw, ah = ax1 - ax0, ay1 - ay0
 
             # where the iris is, and where it should be (aperture center,
-            # a touch above center reads as attentive)
+            # a touch above center reads as attentive); EMA-smoothed so the
+            # warp doesn't jitter frame to frame on landmark noise
             ix, iy = ic.x * w, ic.y * h
             tx = (ax0 + ax1) / 2.0
             ty = (ay0 + ay1) / 2.0 * 0.92
-            dx = int(clamp(round(tx - ix), -int(aw * 0.28), int(aw * 0.28)) * self.strength)
-            dy = int(clamp(round(ty - iy), -int(ah * 0.28), int(ah * 0.28)) * self.strength)
+            self._ema_h.append(clamp(tx - ix, -aw * 0.28, aw * 0.28))
+            self._ema_v.append(clamp(ty - iy, -ah * 0.28, ah * 0.28))
+            sx = sum(self._ema_h) / len(self._ema_h)
+            sy = sum(self._ema_v) / len(self._ema_v)
+            dx = int(round(sx * self.strength))
+            dy = int(round(sy * self.strength))
             if dx == 0 and dy == 0:
                 continue
 
             # feathered aperture mask: the eyeball content shifts, lids stay
             region = out[ay0:ay1, ax0:ax1]
             shifted = cv2.warpAffine(region, np.float32([[1, 0, dx], [0, 1, dy]]),
-                                     (aw, ah))
+                                     (aw, ah), borderMode=cv2.BORDER_REFLECT)
             mask = np.zeros((ah, aw), np.float32)
             cv2.ellipse(mask, (aw // 2, ah // 2),
                         (int(aw * 0.46), int(ah * 0.46)), 0, 0, 360, 1.0, -1)
@@ -261,7 +272,21 @@ def open_writer(path, fps, size):
                              cv2.VideoWriter_fourcc(*"mp4v"), fps, size)
     if not writer.isOpened():
         raise ValueError(f"cannot open output {path}")
-    return writer
+    return _CvSink(writer)
+
+
+class _CvSink:
+    """Adapts cv2.VideoWriter to the write()->bool / release() sink shape."""
+
+    def __init__(self, writer):
+        self.writer = writer
+
+    def write(self, frame):
+        self.writer.write(frame)
+        return True
+
+    def release(self):
+        self.writer.release()
 
 
 class _FFmpegSink:
@@ -273,15 +298,26 @@ class _FFmpegSink:
     def write(self, frame):
         try:
             self.proc.stdin.write(frame.tobytes())
+            return True
         except OSError:
-            pass
+            return False
 
     def release(self):
         try:
             self.proc.stdin.close()
             self.proc.wait(timeout=5)
-        except (OSError, subprocess.TimeoutExpired):
+        except subprocess.TimeoutExpired:
+            self.proc.kill()  # never leave ffmpeg holding /dev/video10
+            self.proc.wait(timeout=2)
+        except OSError:
             pass
+
+
+def _handle_sigterm(signum, _frame):
+    # Electron's companionStop sends SIGTERM; without this handler the
+    # default termination skips cleanup and orphans the ffmpeg child
+    # holding the virtual camera device ("device busy" on next start).
+    raise SystemExit(0)
 
 
 def main() -> int:
@@ -378,13 +414,22 @@ def main() -> int:
           f"(strength {args.strength}, {args.fps} fps). Ctrl-C to stop.")
 
     preview = args.preview
+    consecutive_write_errors = 0
     try:
         frame = first
         n_written = 0
         max_frames = args.frames if args.frames > 0 else 0
         while True:
             corrected = corrector.correct(frame)
-            writer.write(corrected)
+            ok = writer.write(corrected)
+            if ok is False:  # sink reports a dead consumer (e.g. ffmpeg gone)
+                consecutive_write_errors += 1
+                if consecutive_write_errors > 60:
+                    print("error: output sink failed repeatedly — is the "
+                          "device present?", file=sys.stderr)
+                    return 1
+            else:
+                consecutive_write_errors = 0
             n_written += 1
             if max_frames and n_written >= max_frames:
                 break
@@ -404,13 +449,18 @@ def main() -> int:
                         break
     except KeyboardInterrupt:
         pass
-
-    writer.release()
-    if preview:
-        cv2.destroyAllWindows()
+    finally:
+        # Runs on SIGTERM (via SystemExit), Ctrl-C, and any runtime error —
+        # the ffmpeg child must never outlive this process.
+        if writer is not None:
+            writer.release()
+        if preview:
+            cv2.destroyAllWindows()
     print("stopped")
     return 0
 
 
 if __name__ == "__main__":
+    import signal
+    signal.signal(signal.SIGTERM, _handle_sigterm)
     sys.exit(main())

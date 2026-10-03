@@ -599,8 +599,11 @@
 
   // ---- capture: mic (renderer side) — uses AudioWorklet (modern, off-main-thread) ----
   let audioCtx = null, micStream = null, micWorklet = null;
+  let micGeneration = 0; // start/stop race guard: a stop during getUserMedia
   async function startMic() {
     if (micStream) return;
+    const gen = ++micGeneration;
+    const stale = () => gen !== micGeneration; // capture was stopped meanwhile
     try {
       micStream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -611,6 +614,7 @@
           sampleRate: 16000
         }
       });
+      if (stale()) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; return; }
       // getUserMedia can resolve with a stream that has no usable audio track
       // (e.g. a virtual/placeholder device, or a device that was unplugged
       // between permission grant and capture start). Fail loudly here instead
@@ -629,13 +633,18 @@
       // Use AudioWorklet for low-latency, off-main-thread processing
       try {
         await audioCtx.audioWorklet.addModule('audio-worklet-processor.js');
+        if (stale()) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; audioCtx.close(); audioCtx = null; return; }
         const source = audioCtx.createMediaStreamSource(micStream);
         micWorklet = new AudioWorkletNode(audioCtx, 'cirax-audio-processor');
         micWorklet.port.onmessage = (e) => {
           cirax.micPcm(e.data);
         };
         source.connect(micWorklet);
-        // Don't connect to destination — we just capture, don't play
+        // The audio graph is pulled from the destination — a worklet that is
+        // not connected to it never renders and never posts PCM. A zero-gain
+        // sink keeps the pull alive while staying silent.
+        const sink = audioCtx.createGain(); sink.gain.value = 0;
+        micWorklet.connect(sink); sink.connect(audioCtx.destination);
         cirax.log('mic AudioWorklet processor attached');
       } catch (workletErr) {
         // Fallback to ScriptProcessor if AudioWorklet fails (shouldn't happen in Electron 33+)
@@ -674,6 +683,7 @@
     }
   }
   function stopMic() {
+    micGeneration++; // invalidate any startMic still awaiting getUserMedia
     if (micWorklet) {
       if (micWorklet._legacy) {
         micWorklet.proc.disconnect(); micWorklet.proc.onaudioprocess = null;
@@ -725,6 +735,9 @@
           cirax.systemPcm(e.data);
         };
         source.connect(sysWorklet);
+        // Pull-path requirement, same as the mic worklet (see startMic).
+        const sink = sysCtx.createGain(); sink.gain.value = 0;
+        sysWorklet.connect(sink); sink.connect(sysCtx.destination);
         cirax.log('system audio: AudioWorklet capturing loopback');
       } catch (workletErr) {
         // Fallback to ScriptProcessor
@@ -1631,7 +1644,14 @@
     settings.salaryTarget = $('#salary-target').value.trim();
     settings.questionsToAsk = $('#questions-to-ask').value.trim();
     try {
-      settings = await cirax.settingsSet(settings);
+      // This object is a boot-time snapshot — windowX/windowY in it are stale
+      // the moment the window is moved, and saving them would revert the
+      // window to its boot position on the next launch. The settings page
+      // never edits them; main's moved-saver owns them.
+      const patch = { ...settings };
+      delete patch.windowX;
+      delete patch.windowY;
+      settings = await cirax.settingsSet(patch);
       $('#s-status').textContent = statusText();
       updatePrepStatus();
       updateSmartTooltip();
@@ -1817,6 +1837,10 @@
     const st = await cirax.captureState();
     $('#live-dot').classList.toggle('off', !st.active);
     $('#stop-btn').classList.toggle('active', st.active);
+    // A recreated renderer (macOS activate, crash recovery) starts empty —
+    // if main is still capturing, the mic died with the old page. Resume it
+    // or the UI shows "listening" while no audio flows.
+    if (st.active) startMic();
     if (!settings.onboarded) showOnboard();
   })();
 })();

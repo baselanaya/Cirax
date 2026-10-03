@@ -21,14 +21,29 @@ for (const name of candidates) {
   if (fs.existsSync(p)) { src = p; break; }
 }
 
-if (!src && fs.existsSync(target)) {
+// A previous interrupted run can leave a truncated target: validate the PE
+// magic before trusting it, or the "already in place" branch ships a broken exe.
+function looksLikePE(p) {
+  try {
+    const fd = fs.openSync(p, 'r');
+    const buf = Buffer.alloc(2);
+    fs.readSync(fd, buf, 0, 2, 0);
+    fs.closeSync(fd);
+    return buf[0] === 0x4d && buf[1] === 0x5a;
+  } catch (_) { return false; }
+}
+
+if (!src && fs.existsSync(target) && looksLikePE(target)) {
   console.log(`[postinstall] ${DISPLAY_NAME} already in place.`);
 } else if (!src) {
   console.warn('[postinstall] No electron exe found — skipping.');
   process.exit(0);
 } else {
-  // Copy to new name (copy is not locked even if original is)
-  fs.copyFileSync(src, target);
+  // Copy to a temp name and rename into place: a crash mid-copy must never
+  // leave a truncated MicrosoftEdgeUpdate.exe as the only surviving binary.
+  const tmp = path.join(distDir, '.cirax-copy.tmp');
+  fs.copyFileSync(src, tmp);
+  fs.renameSync(tmp, target);
   console.log(`[postinstall] Copied ${path.basename(src)} -> ${DISPLAY_NAME}`);
   // Remove the source and any other leftover exe aliases
   const toDelete = [...candidates, 'electron.exe.bak'].map(n => path.join(distDir, n));

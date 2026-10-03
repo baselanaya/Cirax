@@ -101,6 +101,20 @@ class WhisperModelManager {
         redirect: 'follow',
         signal: abortController.signal
       });
+      // A 416 with a within-range local .part means the server's file no
+      // longer matches our offset — every retry would fail identically.
+      // Restart from byte zero instead of wedging until manual cleanup.
+      if (response.status === 416 && partialBytes > 0) {
+        await fs.promises.rm(partialPath, { force: true });
+        partialBytes = 0;
+        const restarted = await this.fetchImpl(model.url, { redirect: 'follow', signal: abortController.signal });
+        if (!restarted.ok) throw new Error(`Model download failed with HTTP ${restarted.status}.`);
+        await this._writeResponseBody(restarted, partialPath, model, 0, false, onProgress);
+        await this._verifyArtifact(partialPath, model);
+        await fs.promises.rename(partialPath, targetPath);
+        onProgress({ modelId, receivedBytes: model.bytes, totalBytes: model.bytes, percent: 100 });
+        return { modelId, installed: true, resumed: false };
+      }
       const shouldAppend = partialBytes > 0 && response.status === 206;
       if (!response.ok) {
         throw new Error(`Model download failed with HTTP ${response.status}.`);
@@ -156,10 +170,26 @@ class WhisperModelManager {
     await fs.promises.copyFile(sourcePath, importingPath);
     try {
       await this._verifyArtifact(importingPath, model);
-      await fs.promises.rm(targetPath, { force: true });
-      await fs.promises.rename(importingPath, targetPath);
+      // Rename first, delete nothing up front: the old flow (rm target →
+      // rename) destroyed BOTH copies when the rename failed (EBUSY/EPERM
+      // from antivirus is common on Windows) — forcing a multi-GB re-download.
+      const backupPath = `${targetPath}.old`;
+      let hadOld = false;
+      try {
+        await fs.promises.rename(targetPath, backupPath);
+        hadOld = true;
+      } catch { /* no previous install */ }
+      try {
+        await fs.promises.rename(importingPath, targetPath);
+      } catch (renameError) {
+        if (hadOld) await fs.promises.rename(backupPath, targetPath).catch(() => {});
+        throw renameError;
+      }
+      if (hadOld) await fs.promises.rm(backupPath, { force: true });
       return { modelId, installed: true };
     } catch (error) {
+      // The verified copy at importingPath is GOOD — only remove it for
+      // verification failures, never after a rename hiccup.
       await fs.promises.rm(importingPath, { force: true });
       throw error;
     }

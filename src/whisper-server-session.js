@@ -234,7 +234,10 @@ class WhisperServerSession {
       }
       if (this.exitError) throw this.exitError;
       try {
-        const response = await this.fetchImpl(this.healthEndpoint);
+        // A listener that accepts but never answers would otherwise hang one
+        // iteration for the HTTP client's default timeout (~300s), quietly
+        // stretching the startup budget to minutes.
+        const response = await this.fetchImpl(this.healthEndpoint, { signal: AbortSignal.timeout(2000) });
         if (response.ok) return;
       } catch {
         // Connection refusal is expected until the model has finished loading.

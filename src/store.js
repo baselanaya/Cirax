@@ -143,8 +143,17 @@ function save() {
     // destroy the stored credentials.
     const snapshot = JSON.parse(JSON.stringify(data, (k, v) => ((k === 'apiKeysEnc' || k === 'secretsReadError') ? undefined : v)));
     if (secretsBackend === 'safeStorage') {
-      snapshot.apiKeysEnc = encryptKeys(data.apiKeys);
-      if (snapshot.apiKeysEnc) snapshot.apiKeys = {};
+      const enc = encryptKeys(data.apiKeys);
+      if (enc) {
+        snapshot.apiKeysEnc = enc;
+        snapshot.apiKeys = {};
+      } else if (data.apiKeysEnc) {
+        // Nothing new to encrypt and encryption produced no blob — keep the
+        // previous one. Overwriting with '' here is exactly how a keyring
+        // glitch would erase every stored key via a routine settings save.
+        snapshot.apiKeysEnc = data.apiKeysEnc;
+        snapshot.apiKeys = {};
+      }
     } else if (data.apiKeysEnc) {
       snapshot.apiKeysEnc = data.apiKeysEnc;
     }
@@ -160,7 +169,13 @@ module.exports = {
   },
   setSettings(patch) {
     load();
-    const nextSettings = deepMerge(data, patch || {});
+    // getSettings() appends runtime metadata; a renderer that saves the
+    // object it was handed would write that metadata back into the file.
+    // Strip it defensively no matter who calls.
+    const clean = { ...(patch || {}) };
+    delete clean.secretsBackend;
+    delete clean.secretsReadError;
+    const nextSettings = deepMerge(data, clean);
     nextSettings.baseUrl = normalizeBaseUrl(nextSettings.baseUrl);
     data = nextSettings;
     save();
