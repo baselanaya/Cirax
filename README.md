@@ -91,6 +91,7 @@ Optional daemon: corrects your webcam feed so your eyes read as camera-facing wh
 
 - The overlay runs under XWayland by default; Wayland screen capture goes through the PipeWire portal (`WebRTCPipeWireCapturer` is enabled automatically).
 - **The overlay is hidden from your taskbar, but NOT from screen shares on Linux** — the app tells you this at startup. There is no OS mechanism (X11 or Wayland) for per-window capture exclusion yet.
+- Click-through gaps (letting clicks pass through the overlay's transparent margins) are **disabled on Linux**: Electron's `setIgnoreMouseEvents` doesn't forward events on XWayland and can permanently wedge KWin's input handling for the window. The overlay is fully interactive everywhere instead; set `CIRAX_LINUX_CLICKTHROUGH=1` to opt into the cursor-polling implementation on compositors where it works.
 - Some distros print `Fontconfig warning` lines at launch from Chromium's bundled fontconfig — harmless noise, not a Cirax error.
 
 ## License

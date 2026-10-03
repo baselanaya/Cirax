@@ -798,12 +798,19 @@ function pcmAcceptable() { return state.capturing || Date.now() < pcmGraceUntil;
 ipcMain.on('mic:pcm', (_e, arrayBuffer) => { if (pcmAcceptable()) routeAudio('you', arrayBuffer); });
 ipcMain.on('system:pcm', (_e, arrayBuffer) => { if (pcmAcceptable()) routeAudio('them', arrayBuffer); });
 // Click-through: on Windows/macOS the renderer toggles it from forwarded
-// mousemove events (setIgnoreMouseEvents forward:true works there). On
-// Linux/XWayland forwarded events are NOT delivered — the window latches
-// click-through at boot and nothing can re-enable it, i.e. the overlay
-// renders but can never be clicked. There, main owns the toggle instead:
-// the renderer reports where its interactive UI is, and a cursor poll
-// (getCursorScreenPoint works regardless of input forwarding) decides.
+// mousemove events (setIgnoreMouseEvents forward:true works there).
+//
+// On Linux we must NOT call setIgnoreMouseEvents AT ALL. Two independent
+// problems: (1) forwarded events are never delivered on XWayland, so the
+// hover-detect re-enable can't work; (2) worse — Plasma's XWayland input
+// handling can wedge PERMANENTLY for a surface that ever used an input
+// shape: verified live on KDE 6.7 — setIgnoreMouseEvents(false) restores
+// a clear X input region, the poll flips state correctly, and the window
+// still never receives a click again. So on Linux the overlay is simply
+// always interactive (transparent margins included); set
+// CIRAX_LINUX_CLICKTHROUGH=1 to opt back into the cursor-polling
+// click-through on compositors where that works.
+const LINUX_CLICKTHROUGH = process.env.CIRAX_LINUX_CLICKTHROUGH === '1';
 const overlayRect = { x: 0, y: 0, w: 0, h: 0 }; // window-relative, DIP
 let linuxIgnoreState = null;
 ipcMain.on('overlay:rect', (_e, r) => {
@@ -814,10 +821,10 @@ ipcMain.on('overlay:rect', (_e, r) => {
 });
 ipcMain.on('mouse:ignore', (_e, v) => {
   if (!win) return;
-  if (isLinux) return; // the cursor poll below owns the toggle on Linux
+  if (isLinux) return; // Linux never calls setIgnoreMouseEvents (see above)
   win.setIgnoreMouseEvents(!!v, { forward: true });
 });
-if (isLinux) {
+if (isLinux && LINUX_CLICKTHROUGH) {
   setInterval(() => {
     if (!win || win.isDestroyed() || !win.isVisible()) return;
     const cursor = screen.getCursorScreenPoint();
