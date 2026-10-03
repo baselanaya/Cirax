@@ -14,9 +14,9 @@ const { createSTT } = require('./src/stt');
 const { parseDocumentFile } = require('./src/resume');
 const { createLLM } = require('./src/llm');
 const { MODES } = require('./src/prompts');
-const { rms16 } = require('./src/wav');
+const { rms16, peakSliceRms16 } = require('./src/wav');
 const { createStreamingSTT } = require('./src/stt-streaming');
-const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
+const { AdaptiveVAD } = require('./src/vad');
 const { buildInterviewContext, detectCategory } = require('./src/interview-context');
 const { startAppLink, stopAppLink, recordEvent, appLinkConsentState, revokeAppLinkCaller } = require('./src/applink');
 
@@ -176,11 +176,10 @@ const vad = {
     onSpeechEnd: (dur) => send('vad:state', { channel: 'them', speaking: false, durationMs: dur })
   })
 };
-// Pre-speech ring buffers (300ms) so we never clip the start of a word
-const ringBuffers = {
-  you: new AudioRingBuffer(300, 16000),
-  them: new AudioRingBuffer(300, 16000)
-};
+// (No pre-speech ring buffers here: the batch path accumulates audio
+// continuously, and the local-whisper path has its own segmenter with
+// pre-roll in src/utterance-segmenter.js. The former ring buffers were
+// written and cleared but never read — dead weight, removed.)
 
 function pushTranscript(turn) {
   transcript.push(turn);
@@ -399,7 +398,7 @@ async function flushChannel(channel) {
   const pcm = Buffer.concat(chunks);
   buffers[channel] = [];
   if (pcm.length < MIN_BYTES) return;
-  if (rms16(pcm) < RMS_GATE) return; // silence gate
+  if (peakSliceRms16(pcm) < RMS_GATE) return; // silence gate (loudest 100ms slice)
 
   state.transcribing[channel] = true;
   try {
@@ -525,9 +524,6 @@ function routeAudio(channel, pcmBuffer) {
   // Always run through VAD for speech state detection
   vad[channel].processChunk(buf);
 
-  // Keep pre-speech buffer
-  ringBuffers[channel].write(buf);
-
   if (streamingMode && streamingSTT[channel]) {
     // Streaming mode: send raw PCM directly to the WebSocket
     streamingSTT[channel].sendAudio(pcmBuffer);
@@ -581,11 +577,11 @@ async function setCapturing(active) {
   }
 
   state.capturing = false;
+  pcmGraceUntil = Date.now() + PCM_GRACE_MS; // let trailing flushes land
   stopFlushLoop();
   stopStreamingSTT();
   buffers.you = []; buffers.them = [];
   vad.you.reset(); vad.them.reset();
-  ringBuffers.you.clear(); ringBuffers.them.clear();
   const stoppingLocalTranscriber = localWhisperTranscriber;
   localWhisperTranscriber = null;
   send('capture:state', { active: false, streaming: false, mode: stoppingLocalTranscriber ? 'local' : 'off' });
@@ -717,13 +713,14 @@ async function runFeature(mode, userText) {
 }
 
 // -------- IPC --------
-ipcMain.handle('settings:get', () => store.getSettings());
+ipcMain.handle('settings:get', () => store.getSettingsMasked());
 ipcMain.handle('settings:set', (_e, patch) => {
   // Only an STT-related change can cure an STT lockout — re-arming on every
   // save (a smart-toggle click is a save too) would restart the retry spam.
   const sttKeys = ['apiKeys', 'sttProvider', 'localWhisper'];
   if (sttKeys.some((k) => patch && Object.prototype.hasOwnProperty.call(patch, k))) sttDisabled = false;
-  return store.setSettings(patch);
+  store.setSettings(patch);
+  return store.getSettingsMasked(); // never echo plaintext keys back
 });
 ipcMain.handle('companion:start', (_e, overrides) => companionStart(overrides || {}));
 ipcMain.handle('companion:stop', () => companionStop());
@@ -792,8 +789,14 @@ ipcMain.on('ask', (_e, payload) => {
   }
   runFeature(payload.mode, payload.text);
 });
-ipcMain.on('mic:pcm', (_e, arrayBuffer) => { if (state.capturing) routeAudio('you', arrayBuffer); });
-ipcMain.on('system:pcm', (_e, arrayBuffer) => { if (state.capturing) routeAudio('them', arrayBuffer); });
+// A short grace window after capture stops: the renderer's audio worklets
+// flush their partial buffers (~up to 256ms of trailing speech) right after
+// the stop event — the last word of an utterance must not be dropped.
+const PCM_GRACE_MS = 500;
+let pcmGraceUntil = 0;
+function pcmAcceptable() { return state.capturing || Date.now() < pcmGraceUntil; }
+ipcMain.on('mic:pcm', (_e, arrayBuffer) => { if (pcmAcceptable()) routeAudio('you', arrayBuffer); });
+ipcMain.on('system:pcm', (_e, arrayBuffer) => { if (pcmAcceptable()) routeAudio('them', arrayBuffer); });
 ipcMain.on('mouse:ignore', (_e, v) => { if (win) win.setIgnoreMouseEvents(!!v, { forward: true }); });
 ipcMain.on('open-pane', (_e, url) => { shell.openExternal(url).catch(() => {}); });
 ipcMain.on('app:quit', () => app.quit());

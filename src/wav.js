@@ -30,4 +30,18 @@ function rms16(pcm) {
   return Math.sqrt(sum / n);
 }
 
-module.exports = { pcmToWav, rms16 };
+// RMS of the loudest sliceMs slice. Gating on a whole ~900ms window dilutes
+// short speech with silence padding: 200ms of quiet talking inside mostly
+// silence can average below the gate and get dropped whole.
+function peakSliceRms16(pcm, sliceMs = 100, sampleRate = 16000) {
+  if (pcm.length < 2) return 0;
+  const sliceBytes = Math.max(2, Math.floor(sliceMs * sampleRate / 1000) * 2);
+  let peak = 0;
+  for (let off = 0; off < pcm.length; off += sliceBytes) {
+    const slice = pcm.subarray(off, Math.min(off + sliceBytes, pcm.length));
+    if (slice.length >= 2) peak = Math.max(peak, rms16(slice));
+  }
+  return peak;
+}
+
+module.exports = { pcmToWav, rms16, peakSliceRms16 };

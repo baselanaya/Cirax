@@ -81,8 +81,13 @@ class MobileGaze:
         names = [o.name for o in self.session.get_outputs()]
         if len(names) != 2:
             raise ValueError(f"expected 2 output nodes (yaw, pitch), got {names}")
-        # Documented order: outputs[0] = yaw, outputs[1] = pitch.
-        self._out_names = names
+        # Resolve by NAME when the export labels them: a re-export that swaps
+        # node order would silently swap the correction axes if we trusted
+        # positional order. Documented order (yaw first) is the fallback.
+        if set(names) == {"yaw", "pitch"}:
+            self._out_names = ["yaw", "pitch"]
+        else:
+            self._out_names = names
 
     def estimate(self, face_bgr):
         """face_bgr: full-face crop (BGR). Returns (yaw_deg, pitch_deg) or None."""

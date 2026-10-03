@@ -108,8 +108,16 @@ function formatProviderErrorMessage(error, provider, model) {
   }
 
   if (isNotFoundError(error)) {
+    // Local models 404 differently than cloud ones: an Ollama model that
+    // isn't pulled yet needs `ollama pull`, not a settings change.
+    if (provider === 'ollama') {
+      return `Ollama does not have "${model}" — run \`ollama pull ${model}\` in a terminal, then try again.`;
+    }
     const modelHint = model ? ` "${model}"` : '';
-    return `${label} model${modelHint} is unavailable (404) — it may have been renamed, retired by the provider, or misspelled. Open Settings and pick a current model for ${label} (or clear the field to use cirax's default), then try again.`;
+    const endpointHint = provider === 'azure'
+      ? ' For Azure, a 404 usually means the endpoint URL or deployment name, not the model.'
+      : '';
+    return `${label} model${modelHint} is unavailable (404) — it may have been renamed, retired by the provider, or misspelled. Open Settings and pick a current model for ${label} (or clear the field to use cirax's default), then try again.${endpointHint}`;
   }
 
   return rawMessage || 'Unknown LLM error.';

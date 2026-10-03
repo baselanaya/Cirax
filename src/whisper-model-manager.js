@@ -33,6 +33,35 @@ class WhisperModelManager {
     return `${this.getModelPath(modelId)}.part`;
   }
 
+  // A successful full verification writes this sidecar so later sessions
+  // skip the multi-GB re-hash (capture start paid ~a second per model
+  // otherwise). Trusted only when the file size still matches.
+  getVerifiedPath(modelId) {
+    return `${this.getModelPath(modelId)}.verified`;
+  }
+
+  async _isVerifiedFast(modelId) {
+    const model = this.modelById.get(modelId);
+    if (!model) return false;
+    try {
+      const [size, marker] = await Promise.all([
+        this._getFileSize(this.getModelPath(modelId)),
+        fs.promises.readFile(this.getVerifiedPath(modelId), 'utf8')
+      ]);
+      return size === model.bytes && marker.trim() === model.sha256;
+    } catch {
+      return false;
+    }
+  }
+
+  async _markVerified(modelId) {
+    const model = this.modelById.get(modelId);
+    if (!model) return;
+    try {
+      await fs.promises.writeFile(this.getVerifiedPath(modelId), model.sha256, 'utf8');
+    } catch { /* best-effort speedup only */ }
+  }
+
   async listModels() {
     await fs.promises.mkdir(this.modelDirectory, { recursive: true });
     return Promise.all(this.models.map(async (model) => {
@@ -65,8 +94,10 @@ class WhisperModelManager {
     const partialPath = this.getPartialPath(modelId);
     const targetBytes = await this._getFileSize(targetPath);
     if (targetBytes === model.bytes) {
+      if (await this._isVerifiedFast(modelId)) return { modelId, installed: true, resumed: false };
       try {
         await this._verifyArtifact(targetPath, model);
+        await this._markVerified(modelId);
         return { modelId, installed: true, resumed: false };
       } catch {
         await fs.promises.rm(targetPath, { force: true });
@@ -112,6 +143,7 @@ class WhisperModelManager {
         await this._writeResponseBody(restarted, partialPath, model, 0, false, onProgress);
         await this._verifyArtifact(partialPath, model);
         await fs.promises.rename(partialPath, targetPath);
+        await this._markVerified(modelId);
         onProgress({ modelId, receivedBytes: model.bytes, totalBytes: model.bytes, percent: 100 });
         return { modelId, installed: true, resumed: false };
       }
@@ -124,6 +156,7 @@ class WhisperModelManager {
       await this._writeResponseBody(response, partialPath, model, partialBytes, shouldAppend, onProgress);
       await this._verifyArtifact(partialPath, model);
       await fs.promises.rename(partialPath, targetPath);
+      await this._markVerified(modelId);
       onProgress({ modelId, receivedBytes: model.bytes, totalBytes: model.bytes, percent: 100 });
       return { modelId, installed: true, resumed: shouldAppend };
     } catch (error) {
@@ -154,7 +187,8 @@ class WhisperModelManager {
     }
     await Promise.all([
       fs.promises.rm(this.getModelPath(modelId), { force: true }),
-      fs.promises.rm(this.getPartialPath(modelId), { force: true })
+      fs.promises.rm(this.getPartialPath(modelId), { force: true }),
+      fs.promises.rm(this.getVerifiedPath(modelId), { force: true })
     ]);
     return { modelId, installed: false };
   }
@@ -186,6 +220,7 @@ class WhisperModelManager {
         throw renameError;
       }
       if (hadOld) await fs.promises.rm(backupPath, { force: true });
+      await this._markVerified(modelId);
       return { modelId, installed: true };
     } catch (error) {
       // The verified copy at importingPath is GOOD — only remove it for
@@ -199,7 +234,9 @@ class WhisperModelManager {
     const model = this._requireModel(modelId);
     const modelPath = this.getModelPath(modelId);
     await fs.promises.access(modelPath, fs.constants.R_OK);
+    if (await this._isVerifiedFast(modelId)) return modelPath;
     await this._verifyArtifact(modelPath, model);
+    await this._markVerified(modelId);
     return modelPath;
   }
 

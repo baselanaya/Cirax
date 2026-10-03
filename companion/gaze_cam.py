@@ -290,26 +290,61 @@ class _CvSink:
 
 
 class _FFmpegSink:
-    """Minimal frame sink wrapping the ffmpeg process stdin."""
+    """Frame sink wrapping the ffmpeg process stdin.
+
+    Writes go through a small worker thread: a direct pipe write blocks
+    forever if the v4l2 consumer stalls (ffmpeg stops draining, the 64k
+    pipe fills) — the daemon would freeze mid-frame with status "running".
+    The bounded queue drops the OLDEST frame when full, which degrades to a
+    brief stutter instead of a deadlock.
+    """
+
+    _SENTINEL = None
 
     def __init__(self, proc):
+        import queue
+        import threading
         self.proc = proc
+        self.dead = False
+        self._queue = queue.Queue(maxsize=8)
+        self._thread = threading.Thread(target=self._drain, daemon=True)
+        self._thread.start()
+
+    def _drain(self):
+        while True:
+            item = self._queue.get()
+            if item is self._SENTINEL:
+                return
+            try:
+                self.proc.stdin.write(item)
+            except (OSError, ValueError):
+                self.dead = True
+                return
 
     def write(self, frame):
-        try:
-            self.proc.stdin.write(frame.tobytes())
-            return True
-        except OSError:
+        if self.dead:
             return False
+        data = frame.tobytes()
+        try:
+            self._queue.put_nowait(data)
+        except Exception:  # queue full — drop the oldest frame
+            try:
+                self._queue.get_nowait()
+                self._queue.put_nowait(data)
+            except Exception:
+                pass
+        return True
 
     def release(self):
         try:
+            self._queue.put(self._SENTINEL)
+            self._thread.join(timeout=5)
             self.proc.stdin.close()
             self.proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             self.proc.kill()  # never leave ffmpeg holding /dev/video10
             self.proc.wait(timeout=2)
-        except OSError:
+        except (OSError, ValueError):
             pass
 
 
@@ -442,11 +477,20 @@ def main() -> int:
             else:
                 ret, frame = cap.read()
                 if not ret:
+                    # Live devices hiccup (USB renegotiation, power saving) —
+                    # one failed read used to end the daemon. Retry briefly
+                    # before giving up; video files still loop as before.
+                    retries = getattr(main, "_read_retries", 0)
                     time.sleep(0.05)
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     ret, frame = cap.read()
                     if not ret:
+                        if args.input.startswith("/dev/video") and retries < 30:
+                            main._read_retries = retries + 1
+                            time.sleep(0.5)
+                            continue
                         break
+                    main._read_retries = 0
     except KeyboardInterrupt:
         pass
     finally:

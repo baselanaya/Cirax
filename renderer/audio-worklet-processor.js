@@ -8,6 +8,15 @@ class CiraxAudioProcessor extends AudioWorkletProcessor {
     this._bufferSize = 4096; // accumulate before sending (matches old ScriptProcessor)
     this._buffer = new Float32Array(this._bufferSize);
     this._writeIndex = 0;
+    // The page asks for a final flush before disconnecting us — otherwise up
+    // to ~256ms of trailing speech (the last word of an utterance) is lost
+    // at every capture stop.
+    this.port.onmessage = (e) => {
+      if (e.data && e.data.type === 'flush') {
+        if (this._writeIndex > 0) this._flush();
+        this.port.postMessage({ type: 'flushed' });
+      }
+    };
   }
 
   process(inputs, _outputs, _parameters) {

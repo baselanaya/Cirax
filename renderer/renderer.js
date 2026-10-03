@@ -684,16 +684,41 @@
   }
   function stopMic() {
     micGeneration++; // invalidate any startMic still awaiting getUserMedia
+    const ctx = audioCtx;
+    audioCtx = null;
     if (micWorklet) {
       if (micWorklet._legacy) {
         micWorklet.proc.disconnect(); micWorklet.proc.onaudioprocess = null;
         micWorklet.node.disconnect(); micWorklet.sink.disconnect();
+        micWorklet = null;
+        if (ctx) ctx.close();
       } else {
-        micWorklet.disconnect();
+        // Ask the worklet to ship its partial buffer (~up to 256ms of
+        // trailing speech) before disconnect. The context must stay alive
+        // until the flush lands — closing it now would kill the worklet
+        // mid-flush. Keep forwarding PCM until the 'flushed' ack (or the
+        // 100ms timer gives up), then tear the graph down.
+        const w = micWorklet;
+        micWorklet = null;
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          try { w.disconnect(); } catch (_) {}
+          if (ctx) ctx.close();
+        };
+        try {
+          w.port.onmessage = (e) => {
+            if (e.data instanceof ArrayBuffer) { cirax.micPcm(e.data); return; }
+            if (e.data && e.data.type === 'flushed') finish();
+          };
+          w.port.postMessage({ type: 'flush' });
+        } catch (_) { finish(); }
+        setTimeout(finish, 100);
       }
-      micWorklet = null;
+    } else if (ctx) {
+      ctx.close();
     }
-    if (audioCtx) { audioCtx.close(); audioCtx = null; }
     if (micStream) { micStream.getTracks().forEach((t) => t.stop()); micStream = null; }
   }
 
@@ -763,16 +788,39 @@
     }
   }
   function stopSystemAudio() {
+    const ctx = sysCtx;
+    sysCtx = null;
     if (sysWorklet) {
       if (sysWorklet._legacy) {
         sysWorklet.proc.disconnect(); sysWorklet.proc.onaudioprocess = null;
         sysWorklet.node.disconnect(); sysWorklet.sink.disconnect();
+        sysWorklet = null;
+        if (ctx) ctx.close();
       } else {
-        sysWorklet.disconnect();
+        // Same trailing-flush handshake as stopMic; the context closes only
+        // after the flush lands (a closed context would kill the worklet
+        // before it could ship its partial buffer).
+        const w = sysWorklet;
+        sysWorklet = null;
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          try { w.disconnect(); } catch (_) {}
+          if (ctx) ctx.close();
+        };
+        try {
+          w.port.onmessage = (e) => {
+            if (e.data instanceof ArrayBuffer) { cirax.systemPcm(e.data); return; }
+            if (e.data && e.data.type === 'flushed') finish();
+          };
+          w.port.postMessage({ type: 'flush' });
+        } catch (_) { finish(); }
+        setTimeout(finish, 100);
       }
-      sysWorklet = null;
+    } else if (ctx) {
+      ctx.close();
     }
-    if (sysCtx) { sysCtx.close(); sysCtx = null; }
     if (sysStream) { sysStream.getTracks().forEach((t) => t.stop()); sysStream = null; }
   }
 

@@ -161,11 +161,29 @@ function save() {
   } catch (e) { /* ignore */ }
 }
 
+// Sentinel returned instead of a real key: the renderer shows it in the
+// password fields and MUST send it back unchanged on save — anything else
+// means the user edited the field and the new value is stored.
+const KEY_SENTINEL = '********';
+
 module.exports = {
   MAX_AI_RULES_CHARS,
+  KEY_SENTINEL,
+  // Internal, trusted consumers only (createLLM, createSTT): REAL keys.
   getSettings() {
     const s = load();
     return { ...s, secretsBackend };
+  },
+  // IPC boundary version: the renderer never sees plaintext keys. The UI
+  // shows the sentinel; a save only replaces a key when its field changed.
+  getSettingsMasked() {
+    const s = this.getSettings();
+    if (s.apiKeys) {
+      s.apiKeys = Object.fromEntries(
+        Object.entries(s.apiKeys).map(([k, v]) => [k, v ? KEY_SENTINEL : ''])
+      );
+    }
+    return s;
   },
   setSettings(patch) {
     load();
@@ -175,6 +193,13 @@ module.exports = {
     const clean = { ...(patch || {}) };
     delete clean.secretsBackend;
     delete clean.secretsReadError;
+    if (clean.apiKeys) {
+      clean.apiKeys = Object.fromEntries(
+        Object.entries(clean.apiKeys)
+          // sentinel = "user did not touch this field" — keep the stored key
+          .map(([k, v]) => [k, v === KEY_SENTINEL ? data.apiKeys[k] : v])
+      );
+    }
     const nextSettings = deepMerge(data, clean);
     nextSettings.baseUrl = normalizeBaseUrl(nextSettings.baseUrl);
     data = nextSettings;
