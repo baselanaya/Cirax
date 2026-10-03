@@ -298,7 +298,7 @@ function createWindow() {
     skipTaskbar: true,
     alwaysOnTop: true,
     fullscreenable: false,
-    icon: path.join(__dirname, 'build-resources', 'icon.png'), // Linux window icon
+    icon: path.join(__dirname, 'build-resources', 'icon-window.png'), // Linux window icon
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -797,7 +797,41 @@ let pcmGraceUntil = 0;
 function pcmAcceptable() { return state.capturing || Date.now() < pcmGraceUntil; }
 ipcMain.on('mic:pcm', (_e, arrayBuffer) => { if (pcmAcceptable()) routeAudio('you', arrayBuffer); });
 ipcMain.on('system:pcm', (_e, arrayBuffer) => { if (pcmAcceptable()) routeAudio('them', arrayBuffer); });
-ipcMain.on('mouse:ignore', (_e, v) => { if (win) win.setIgnoreMouseEvents(!!v, { forward: true }); });
+// Click-through: on Windows/macOS the renderer toggles it from forwarded
+// mousemove events (setIgnoreMouseEvents forward:true works there). On
+// Linux/XWayland forwarded events are NOT delivered — the window latches
+// click-through at boot and nothing can re-enable it, i.e. the overlay
+// renders but can never be clicked. There, main owns the toggle instead:
+// the renderer reports where its interactive UI is, and a cursor poll
+// (getCursorScreenPoint works regardless of input forwarding) decides.
+const overlayRect = { x: 0, y: 0, w: 0, h: 0 }; // window-relative, DIP
+let linuxIgnoreState = null;
+ipcMain.on('overlay:rect', (_e, r) => {
+  if (r && [r.x, r.y, r.w, r.h].every((n) => Number.isFinite(n))) {
+    overlayRect.x = r.x; overlayRect.y = r.y; overlayRect.w = r.w; overlayRect.h = r.h;
+    if (process.env.CIRAX_DEBUG_POINTER) console.log('[cirax] rect', JSON.stringify(overlayRect));
+  }
+});
+ipcMain.on('mouse:ignore', (_e, v) => {
+  if (!win) return;
+  if (isLinux) return; // the cursor poll below owns the toggle on Linux
+  win.setIgnoreMouseEvents(!!v, { forward: true });
+});
+if (isLinux) {
+  setInterval(() => {
+    if (!win || win.isDestroyed() || !win.isVisible()) return;
+    const cursor = screen.getCursorScreenPoint();
+    const [wx, wy] = win.getPosition();
+    const inside = cursor.x >= wx + overlayRect.x && cursor.x <= wx + overlayRect.x + overlayRect.w &&
+                   cursor.y >= wy + overlayRect.y && cursor.y <= wy + overlayRect.y + overlayRect.h;
+    const wantIgnore = !inside;
+    if (wantIgnore !== linuxIgnoreState) {
+      linuxIgnoreState = wantIgnore;
+      win.setIgnoreMouseEvents(wantIgnore);
+      if (process.env.CIRAX_DEBUG_POINTER) console.log('[cirax] click-through ->', wantIgnore);
+    }
+  }, 120);
+}
 ipcMain.on('open-pane', (_e, url) => { shell.openExternal(url).catch(() => {}); });
 ipcMain.on('app:quit', () => app.quit());
 ipcMain.on('log', (_e, msg) => console.log('[renderer]', msg));
@@ -927,7 +961,7 @@ function createPermissionsWindow() {
     resizable: false,
     skipTaskbar: false,
     fullscreenable: false,
-    icon: path.join(__dirname, 'build-resources', 'icon.png'),
+    icon: path.join(__dirname, 'build-resources', 'icon-window.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

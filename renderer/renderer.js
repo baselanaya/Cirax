@@ -1731,12 +1731,36 @@
   // ---- click-through: only the UI blocks the mouse; empty gaps pass to your screen ----
   let ignoring = null;
   function setIgnore(v) { if (v !== ignoring) { ignoring = v; cirax.setIgnoreMouse(v); } }
-  document.addEventListener('mousemove', (e) => {
-    const el = document.elementFromPoint(e.clientX, e.clientY);
-    const overUI = !!(el && el.closest && el.closest('#toolbar, #panel-wrap, #transcript-sidebar, #settings-scrim, #onboard-scrim, #consent-scrim'));
-    setIgnore(!overUI);
-  });
-  setIgnore(true); // start fully click-through; hovering the panel re-enables it
+  if (cirax.platform === 'linux') {
+    // Linux/XWayland never delivers forwarded mousemove events while the
+    // window ignores the mouse, so the hover-detection below can't work:
+    // the window would latch click-through forever. Instead, report the
+    // bounding box of the interactive UI; main polls the cursor against it.
+    const report = () => {
+      const ids = ['#toolbar', '#panel-wrap', '#transcript-sidebar', '#settings-scrim', '#onboard-scrim', '#consent-scrim'];
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const id of ids) {
+        const el = document.querySelector(id);
+        if (!el || el.classList.contains('hidden')) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width <= 0 && r.height <= 0) continue;
+        x0 = Math.min(x0, r.left); y0 = Math.min(y0, r.top);
+        x1 = Math.max(x1, r.right); y1 = Math.max(y1, r.bottom);
+      }
+      if (x1 < x0) { x0 = 0; y0 = 0; x1 = 0; y1 = 0; } // nothing visible
+      cirax.reportOverlayRect({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
+    };
+    report();
+    setInterval(report, 300); // catches settings open/close, sidebar, hide, onboard
+    window.addEventListener('resize', report);
+  } else {
+    document.addEventListener('mousemove', (e) => {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const overUI = !!(el && el.closest && el.closest('#toolbar, #panel-wrap, #transcript-sidebar, #settings-scrim, #onboard-scrim, #consent-scrim'));
+      setIgnore(!overUI);
+    });
+    setIgnore(true); // start fully click-through; hovering the panel re-enables it
+  }
 
   // ---- assistant access request ------------------------------------------
   // Shown here rather than as a native dialog because cirax hides its dock icon:

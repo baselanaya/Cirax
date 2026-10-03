@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('cirax', {
   micPcm: (arrayBuffer) => ipcRenderer.send('mic:pcm', arrayBuffer),
   systemPcm: (arrayBuffer) => ipcRenderer.send('system:pcm', arrayBuffer),
   setIgnoreMouse: (v) => ipcRenderer.send('mouse:ignore', v),
+  reportOverlayRect: (rect) => ipcRenderer.send('overlay:rect', rect),
   clearTranscript: () => ipcRenderer.invoke('transcript:clear'),
   openPane: (url) => ipcRenderer.send('open-pane', url),
   appLinkState: () => ipcRenderer.invoke('applink:state'),
